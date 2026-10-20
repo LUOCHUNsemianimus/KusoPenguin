@@ -1,0 +1,1 @@
+Unmodified curved-UV models and matching runtime resources before per-face geometry revision. Restore all three sources and shared atlas together; use current exporter to regenerate runtime JSON. Original 492/308/200 triangles.

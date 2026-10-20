@@ -1,0 +1,14 @@
+{
+  "effect.kuso_penguin.penguin": "Penguin",
+  "item.minecraft.potion.effect.penguin": "Potion of Penguin",
+  "item.minecraft.splash_potion.effect.penguin": "Splash Potion of Penguin",
+  "item.minecraft.lingering_potion.effect.penguin": "Lingering Potion of Penguin",
+  "item.minecraft.tipped_arrow.effect.penguin": "Arrow of Penguin",
+  "key.categories.kuso_penguin": "Kuso Penguin",
+  "key.kuso_penguin.mesh_preview": "Cycle Mesh Preview Quality (Block/High/Medium/Low)",
+  "mesh.kuso_penguin.quality.block": "Block",
+  "mesh.kuso_penguin.quality.high": "High (492 triangles)",
+  "mesh.kuso_penguin.quality.medium": "Medium (308 triangles)",
+  "mesh.kuso_penguin.quality.low": "Low (200 triangles)",
+  "message.kuso_penguin.mesh_preview.quality": "Mesh preview: %1$s. Press %2$s to cycle to %3$s."
+}

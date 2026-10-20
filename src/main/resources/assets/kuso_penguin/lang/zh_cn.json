@@ -1,0 +1,14 @@
+{
+  "effect.kuso_penguin.penguin": "企鹅",
+  "item.minecraft.potion.effect.penguin": "企鹅药水",
+  "item.minecraft.splash_potion.effect.penguin": "喷溅型企鹅药水",
+  "item.minecraft.lingering_potion.effect.penguin": "滞留型企鹅药水",
+  "item.minecraft.tipped_arrow.effect.penguin": "企鹅之箭",
+  "key.categories.kuso_penguin": "Kuso Penguin",
+  "key.kuso_penguin.mesh_preview": "循环切换网格预览档位（方块/高/中/低）",
+  "mesh.kuso_penguin.quality.block": "方块",
+  "mesh.kuso_penguin.quality.high": "高（492 三角面）",
+  "mesh.kuso_penguin.quality.medium": "中（308 三角面）",
+  "mesh.kuso_penguin.quality.low": "低（200 三角面）",
+  "message.kuso_penguin.mesh_preview.quality": "网格预览：%1$s。按 %2$s 循环切换到 %3$s。"
+}

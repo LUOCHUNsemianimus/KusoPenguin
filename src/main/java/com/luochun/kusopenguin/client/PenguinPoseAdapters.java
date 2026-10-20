@@ -1,0 +1,74 @@
+package com.luochun.kusopenguin.client;
+
+import net.minecraft.client.model.EntityModel;
+import net.minecraft.client.model.HumanoidModel;
+import net.minecraft.client.model.VillagerModel;
+import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.model.geom.PartPose;
+import net.minecraft.world.entity.LivingEntity;
+
+/**
+ * Explicit animation adapters. ModelPart names alone are not treated as a compatibility contract:
+ * humanoid parts are mapped one by one, while the villager's combined crossed "arms" part is
+ * split onto the two wings.
+ */
+public final class PenguinPoseAdapters {
+    private static final float VILLAGER_WING_CROSS_Z = 0.9F;
+
+    private PenguinPoseAdapters() {
+    }
+
+    public static PenguinPoseAdapter find(EntityModel<?> original) {
+        if (original instanceof VillagerModel<?>) {
+            return PenguinPoseAdapters::applyVillager;
+        }
+        if (original instanceof HumanoidModel<?>) {
+            return PenguinPoseAdapters::applyHumanoid;
+        }
+        return null;
+    }
+
+    private static void applyHumanoid(PenguinBodyModel penguin, EntityModel<?> original,
+                                      LivingEntity entity) {
+        HumanoidModel<?> humanoid = (HumanoidModel<?>) original;
+        copyPart(humanoid.body, penguin.body());
+        copyPart(humanoid.rightArm, penguin.rightWing());
+        copyPart(humanoid.leftArm, penguin.leftWing());
+        copyPart(humanoid.rightLeg, penguin.rightFoot());
+        copyPart(humanoid.leftLeg, penguin.leftFoot());
+    }
+
+    private static void applyVillager(PenguinBodyModel penguin, EntityModel<?> original,
+                                      LivingEntity entity) {
+        VillagerModel<?> villager = (VillagerModel<?>) original;
+        ModelPart root = villager.root();
+        copyPart(root.getChild("body"), penguin.body());
+        copyPart(root.getChild("right_leg"), penguin.rightFoot());
+        copyPart(root.getChild("left_leg"), penguin.leftFoot());
+
+        // VillagerModel has one static, combined "arms" part (crossed in front of the chest).
+        // The penguin has two hanging wings, so use the arm part's rotation and add opposite
+        // Z rotations to reproduce the crossed shape with the two separate wings.
+        ModelPart arms = root.getChild("arms");
+        penguin.rightWing().xRot = arms.xRot;
+        penguin.rightWing().yRot = arms.yRot;
+        penguin.rightWing().zRot = arms.zRot - VILLAGER_WING_CROSS_Z;
+        penguin.leftWing().xRot = arms.xRot;
+        penguin.leftWing().yRot = arms.yRot;
+        penguin.leftWing().zRot = arms.zRot + VILLAGER_WING_CROSS_Z;
+    }
+
+    /**
+     * Copy the source rotation and its translation delta from the source's initial pose. Copying
+     * the whole pose would replace the penguin's own pivots and dimensions with human lengths.
+     */
+    private static void copyPart(ModelPart source, ModelPart target) {
+        PartPose initial = source.getInitialPose();
+        target.x += source.x - initial.x;
+        target.y += source.y - initial.y;
+        target.z += source.z - initial.z;
+        target.xRot = source.xRot;
+        target.yRot = source.yRot;
+        target.zRot = source.zRot;
+    }
+}
