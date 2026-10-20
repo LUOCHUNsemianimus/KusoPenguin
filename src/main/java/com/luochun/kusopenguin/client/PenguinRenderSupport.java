@@ -1,7 +1,7 @@
 package com.luochun.kusopenguin.client;
 
+import com.luochun.kusopenguin.animation.PenguinEntitySupport;
 import com.luochun.kusopenguin.registry.ModEffects;
-import java.util.Set;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 
@@ -10,22 +10,11 @@ import net.minecraft.world.entity.LivingEntity;
  * vanilla renderer instead of mixing the original head with a penguin body.
  */
 public final class PenguinRenderSupport {
-    private static final Set<EntityType<?>> SUPPORTED_TYPES = Set.of(
-            EntityType.PLAYER,
-            EntityType.SKELETON,
-            EntityType.ZOMBIE,
-            EntityType.VILLAGER,
-            EntityType.PIGLIN,
-            EntityType.ZOMBIFIED_PIGLIN,
-            EntityType.CREEPER, EntityType.ENDERMAN, EntityType.WITHER_SKELETON,
-            EntityType.ZOMBIE_VILLAGER, EntityType.IRON_GOLEM, EntityType.WARDEN
-    );
-
     private PenguinRenderSupport() {
     }
 
     public static boolean isSupportedType(EntityType<?> type) {
-        return SUPPORTED_TYPES.contains(type);
+        return PenguinEntitySupport.isSupportedType(type);
     }
 
     public static boolean shouldReplace(LivingEntity entity) {

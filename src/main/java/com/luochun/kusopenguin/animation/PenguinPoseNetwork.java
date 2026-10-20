@@ -10,7 +10,7 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 public final class PenguinPoseNetwork {
     private PenguinPoseNetwork(){}
     @SubscribeEvent public static void register(RegisterPayloadHandlersEvent event){
-        event.registrar("1").playToClient(PenguinPosePayload.TYPE,PenguinPosePayload.STREAM_CODEC,
+        event.registrar("2").playToClient(PenguinPosePayload.TYPE,PenguinPosePayload.STREAM_CODEC,
                 (payload,context)->context.enqueueWork(()->PenguinPoseClient.receive(payload)));
     }
 }

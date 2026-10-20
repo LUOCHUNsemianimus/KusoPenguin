@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.luochun.kusopenguin.KusoPenguin;
+import com.luochun.kusopenguin.animation.PenguinAction;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import java.io.IOException;
@@ -62,7 +63,7 @@ public final class PenguinMeshModel {
     private static final ReloadListener RELOAD_LISTENER = new ReloadListener();
     private record Loaded(Map<PenguinMeshPreview.Quality,PenguinMeshModel> meshes,
                           Map<PenguinMeshPreview.Quality,PenguinSkinnedMesh> skins,
-                          PenguinAnimationClip clip) {}
+                          Map<PenguinAction,PenguinAnimationClip> clips) {}
     private static volatile Loaded cache;
 
     private final Part body;
@@ -99,7 +100,10 @@ public final class PenguinMeshModel {
 
     List<Part> animationParts(){return List.of(body,rightWing,leftWing,rightFoot,leftFoot);}
 
-    public static PenguinAnimationClip animationClip(){Loaded loaded=cache;return loaded==null?null:loaded.clip();}
+    public static PenguinAnimationClip animationClip(){return animationClip(PenguinAction.TAUNT);}
+    public static PenguinAnimationClip animationClip(PenguinAction action){
+        Loaded loaded=cache;return loaded==null?null:loaded.clips().get(action);
+    }
     public static PenguinSkinnedMesh currentSkin(){
         Loaded loaded=cache;
         return loaded==null||!PenguinMeshPreview.isEnabled()?null:loaded.skins().get(PenguinMeshPreview.quality());
@@ -392,9 +396,23 @@ public final class PenguinMeshModel {
                 try(Reader reader=new InputStreamReader(clipResource.open(),StandardCharsets.UTF_8)){
                     clip=PenguinAnimationClip.parse(reader);
                 }
+                Map<PenguinAction,PenguinAnimationClip> clips=new EnumMap<>(PenguinAction.class);
+                clips.put(PenguinAction.TAUNT,clip);
+                for(PenguinAction action:PenguinAction.values()){
+                    if(action==PenguinAction.TAUNT)continue;
+                    ResourceLocation location=action.animationId();
+                    Resource resource=resourceManager.getResource(location)
+                            .orElseThrow(()->new IOException("Missing animation "+location));
+                    PenguinAnimationClip parsedClip;
+                    try(Reader reader=new InputStreamReader(resource.open(),StandardCharsets.UTF_8)){
+                        parsedClip=PenguinAnimationClip.parse(reader);
+                    }
+                    if(!parsedClip.sameRigAs(clip))throw new IOException("Animation rig mismatch for "+location);
+                    clips.put(action,parsedClip);
+                }
                 Map<PenguinMeshPreview.Quality,PenguinSkinnedMesh> skins=new EnumMap<>(PenguinMeshPreview.Quality.class);
                 for(var entry:parsed.entrySet())skins.put(entry.getKey(),PenguinSkinnedMesh.bake(entry.getValue(),clip));
-                return new Loaded(Map.copyOf(parsed),Map.copyOf(skins),clip);
+                return new Loaded(Map.copyOf(parsed),Map.copyOf(skins),Map.copyOf(clips));
             } catch (IOException | RuntimeException exception) {
                 LOGGER.error("Failed to load experimental penguin mesh tiers {}", MODELS.values(),
                         exception);

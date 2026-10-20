@@ -58,8 +58,9 @@ public final class PenguinPoseAdapters {
                                       LivingEntity entity) {
         HumanoidModel<?> humanoid = (HumanoidModel<?>) original;
         copyPart(humanoid.body, penguin.body());
-        copyPart(humanoid.rightArm, penguin.rightWing());
-        copyPart(humanoid.leftArm, penguin.leftWing());
+        // Historical wing names use the opposite X side from vanilla anatomical arms.
+        copyPart(humanoid.rightArm, penguin.leftWing());
+        copyPart(humanoid.leftArm, penguin.rightWing());
         copyPart(humanoid.rightLeg, penguin.rightFoot());
         copyPart(humanoid.leftLeg, penguin.leftFoot());
     }
