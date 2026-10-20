@@ -28,9 +28,13 @@ def direction(bones,start,end,parent):
     v=[b-a for a,b in zip(bones[start]['world_position_m'],bones[end]['world_position_m'])]
     return conv(rotate(inv(bones[parent]['world_rotation_xyzw']),unit(v)))
 
-def export(root,check):
+def export(root,check,action="flying_kick"):
+    death=action=="flying_back_death"
     load=lambda p:json.loads((root/p).read_text(encoding='utf-8'))
-    source=load('models/animation/flying_kick-source-reference.json')
+    source=load('models/animation/'+action+'-source-reference.json')
+    if death:
+        source['frames']=source['frames'][:60]
+        source['metadata']['duration_seconds']=source['frames'][-1]['time']
     neutral=load('models/animation/taunt-source-reference.json')['source']['frames'][0]['bones']
     joints=load('models/animation/penguin_rig.json')['joints'];bind=[j['bind'] for j in joints]
     pelvis0=neutral['mixamorig_Hips']['world_rotation_xyzw'];chest0=neutral['mixamorig_Spine2']['world_rotation_xyzw']
@@ -40,9 +44,12 @@ def export(root,check):
     for f in source['frames']:
         b=f['bones'];q=[[0,0,0,1] for _ in joints];t=[[0,0,0] for _ in joints];s=[[1,1,1] for _ in joints]
         # No copied horizontal root travel: attack reach and collision remain vanilla.
-        t[0][1]=max(-9,min(3,(first_y-b['Hips']['world_position_m'][1])*12))
-        pelvis=limit(mul(mul(inv(chest0),mul(b['Hips']['world_rotation_xyzw'],inv(pelvis0))),chest0),55)
-        chest=limit(mul(inv(chest0),b['Spine2']['world_rotation_xyzw']),65)
+        t[0][1]=0 # Actual collision-aware travel owns all jump height.
+        if death:
+            first=source['frames'][0]['bones']['Hips']['world_position_m']
+            t[0]=[(first[i]-b['Hips']['world_position_m'][i])*12 for i in range(3)]
+        pelvis=limit(mul(mul(inv(chest0),mul(b['Hips']['world_rotation_xyzw'],inv(pelvis0))),chest0),170 if death else 55)
+        chest=limit(mul(inv(chest0),b['Spine2']['world_rotation_xyzw']),170 if death else 65)
         q[1]=pelvis;q[2]=mul(inv(pelvis),chest)
         head=mul(b['Neck']['local_rotation_xyzw'],b['Head']['local_rotation_xyzw'])
         q[3]=limit(mul(head,inv(head0)),55)
@@ -61,15 +68,15 @@ def export(root,check):
             q[l+1]=limit(aim([0,1,0],rotate(inv(q[l]),calf)),140)
             q[l+2]=limit(aim([0,0,-1],rotate(inv(mul(q[l],q[l+1])),toes)),80)
         frames.append({'time':f['time'],'rotations':q,'translations':t,'scales':s})
-    result={'schema':1,'name':'flying_kick','source':'Mixamo Flying Kick; directional retarget, fixed target lengths, visual lift only',
-            'source_sha256':source['metadata']['source_sha256'],'blend_in':.1,'blend_out':.2,
+    result={'schema':1,'name':action,'source':'Mixamo Flying Kick; directional retarget, fixed target lengths, server-authorized physical travel',
+            'source_sha256':source['metadata']['source_sha256'],'blend_in':.05 if death else .1,'blend_out':.05 if death else .2,
             'duration':source['metadata']['duration_seconds'],'joints':joints,'frames':frames}
     data=json.dumps(result,separators=(',',':'),allow_nan=False).encode('utf-8')
-    path=root/'src/main/resources/assets/kuso_penguin/animations/flying_kick.json'
+    path=root/('src/main/resources/assets/kuso_penguin/animations/'+action+'.json')
     if check:
         if path.read_bytes()!=data:raise ValueError('Export drift: '+str(path))
     else:path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
-    print(('CHECK OK' if check else 'EXPORTED')+' flying_kick: '+str(len(frames))+' frames, '+str(result['duration'])+' seconds')
+    print(('CHECK OK' if check else 'EXPORTED')+' '+action+': '+str(len(frames))+' frames, '+str(result['duration'])+' seconds')
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--root',type=Path,default=Path(__file__).resolve().parents[1]);p.add_argument('--check',action='store_true');a=p.parse_args();export(a.root,a.check)
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--root',type=Path,default=Path(__file__).resolve().parents[1]);p.add_argument('--check',action='store_true');a=p.parse_args();export(a.root,a.check);export(a.root,a.check,"flying_back_death")

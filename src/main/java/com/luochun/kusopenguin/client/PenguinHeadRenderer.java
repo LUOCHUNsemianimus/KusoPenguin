@@ -36,6 +36,31 @@ public final class PenguinHeadRenderer {
         head.translateAndRotate(stack);return new Matrix4f(stack.last().pose());
     }
 
+    
+    /** Head-only native geometry bound, including noses, hats and head children. */
+    static float maxY(EntityModel<?> model,Matrix4f delta){
+        PoseStack stack=new PoseStack();stack.mulPose(delta);
+        stack.translate(0,PenguinProportions.forModel(model).headDropBlocks(),0);
+        ModelPart head;
+        if(model instanceof HumanoidModel<?> h)head=h.head;
+        else if(model instanceof VillagerModel<?> v)head=v.getHead();
+        else if(model instanceof CreeperModel<?> c)head=c.root().getChild("head");
+        else if(model instanceof IronGolemModel<?> g)head=g.root().getChild("head");
+        else if(model instanceof WardenModel<?> w){
+            ModelPart root=w.root(),bone=root.getChild("bone"),body=bone.getChild("body");
+            root.translateAndRotate(stack);bone.translateAndRotate(stack);body.translateAndRotate(stack);head=body.getChild("head");
+        }else throw new IllegalArgumentException("Unsupported death head");
+        float[] max={Float.NEGATIVE_INFINITY};org.joml.Vector3f point=new org.joml.Vector3f();
+        ModelPart.Visitor visitor=(pose,path,index,cube)->{
+            for(int corner=0;corner<8;corner++){
+                point.set((corner&1)==0?cube.minX:cube.maxX,(corner&2)==0?cube.minY:cube.maxY,(corner&4)==0?cube.minZ:cube.maxZ).div(16);
+                pose.pose().transformPosition(point);max[0]=Math.max(max[0],point.y);
+            }
+        };
+        head.visit(stack,visitor);
+        if(model instanceof HumanoidModel<?> h)h.hat.visit(stack,visitor);
+        return max[0];
+    }
     public static boolean renderHead(EntityModel<?> model, PoseStack poseStack,
                                      VertexConsumer buffer, int packedLight,
                                      int packedOverlay, int color) {

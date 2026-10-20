@@ -36,6 +36,10 @@ public final class PenguinAnimationClip {
         }
         return new Sample(weight,q,p,s);
     }
+    public Sample sampleTerminal(float age){
+        Sample s=sample(Math.min(age,blendIn+duration));
+        return new Sample(age<blendIn?s.weight():1,s.rotations(),s.translations(),s.scales());
+    }
     private static float smooth(float t){t=Math.max(0,Math.min(1,t));return t*t*(3-2*t);}
     /** Every action must share exactly the same joint names, parents and bind pivots as Taunt. */
     boolean sameRigAs(PenguinAnimationClip other){

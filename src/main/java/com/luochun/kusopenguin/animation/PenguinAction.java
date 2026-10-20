@@ -9,7 +9,8 @@ import net.minecraft.resources.ResourceLocation;
  */
 public enum PenguinAction {
     TAUNT("taunt", 0, 3.433333F),
-    FLYING_KICK("flying_kick", 1, 1.8F);
+    FLYING_KICK("flying_kick", 1, 1.8F),
+    DEATH("flying_back_death", 2, 2.066667F);
 
     private final ResourceLocation animationId;
     private final int priority;

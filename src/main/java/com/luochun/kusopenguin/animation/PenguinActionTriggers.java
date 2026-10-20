@@ -34,7 +34,7 @@ public final class PenguinActionTriggers {
         if (!PenguinEntitySupport.isSupportedType(mob.getType())) {
             return;
         }
-        trigger(mob, PenguinAction.FLYING_KICK);
+        if(!PenguinKick.independentMob(mob))PenguinKick.tryStart(mob);
     }
 
     private static void trigger(LivingEntity entity, PenguinAction action) {

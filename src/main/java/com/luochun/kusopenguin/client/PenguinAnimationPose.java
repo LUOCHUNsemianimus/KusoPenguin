@@ -33,7 +33,20 @@ public final class PenguinAnimationPose {
         Vector3f target=world[3].getTranslation(new Vector3f()).mul(profile.bodyScale()/16)
                 .add(0,profile.bodyOffsetBlocks(),0).add(pivotOffset);
         // Only the mount position inherits stretch. Head geometry gets a rigid rotation.
+        
         headDelta=new Matrix4f().translation(target).rotate(headQ).mul(new Matrix4f(nativeHead).invert());
+        if(action==PenguinAction.DEATH){
+            PenguinSkinnedMesh mesh=PenguinMeshModel.currentSkin();
+            float bodyY=profile.bodyOffsetBlocks()+mesh.maxY(this)*profile.bodyScale()/16;
+            float headY=PenguinHeadRenderer.maxY(original,headDelta);
+            float lift=java.lang.Math.min(0,profile.footY()/16-java.lang.Math.max(bodyY,headY));
+            // Native model Y points down. Lift the whole rig and head together; no geometry stretch.
+            if(lift<0){
+                float pixels=lift*16/profile.bodyScale();
+                for(int i=0;i<world.length;i++){world[i].m31(world[i].m31()+pixels);skin[i].m31(skin[i].m31()+pixels);}
+                headDelta.m31(headDelta.m31()+lift);
+            }
+        }
     }
     public static PenguinAnimationPose evaluate(PenguinAnimationClip clip,PenguinAnimationClip.Sample sample,
                                                 PenguinBodyModel parts,EntityModel<?> original) {
@@ -60,7 +73,7 @@ public final class PenguinAnimationPose {
     }
     private void leg(PenguinAnimationClip clip,PenguinAnimationClip.Sample s,int i,ModelPart nativeLeg,
                      PenguinAction action){
-        if(action==PenguinAction.FLYING_KICK){
+        if(action==PenguinAction.FLYING_KICK||action==PenguinAction.DEATH){
             // The kick leg hangs from the animated pelvis. Blend the native short leg into that
             // fixed hip bind target, then let the knee/foot bind chain carry the clip.
             Matrix4f nativeBase=new Matrix4f(world[0]).mul(part(nativeLeg));

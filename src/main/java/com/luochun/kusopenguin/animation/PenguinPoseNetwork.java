@@ -10,7 +10,12 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 public final class PenguinPoseNetwork {
     private PenguinPoseNetwork(){}
     @SubscribeEvent public static void register(RegisterPayloadHandlersEvent event){
-        event.registrar("2").playToClient(PenguinPosePayload.TYPE,PenguinPosePayload.STREAM_CODEC,
+        var registrar=event.registrar("3");
+        registrar.playToServer(PenguinKickRequest.TYPE,PenguinKickRequest.STREAM_CODEC,
+            (payload,context)->context.enqueueWork(()->PenguinKick.tryStart(context.player())));
+        registrar.playToClient(PenguinKickMotion.TYPE,PenguinKickMotion.STREAM_CODEC,
+            (payload,context)->context.enqueueWork(()->com.luochun.kusopenguin.client.PenguinKickInput.receive(payload)));
+        registrar.playToClient(PenguinPosePayload.TYPE,PenguinPosePayload.STREAM_CODEC,
                 (payload,context)->context.enqueueWork(()->PenguinPoseClient.receive(payload)));
     }
 }

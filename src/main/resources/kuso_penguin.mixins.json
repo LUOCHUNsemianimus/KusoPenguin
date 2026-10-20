@@ -6,7 +6,9 @@
   "mixins": [
     "LivingEntityEffectSyncMixin",
     "PlayerAttackMixin",
-    "MobAttackMixin"
+    "MobAttackMixin",
+    "PenguinTravelMixin",
+    "PenguinDeathMixin"
   ],
   "client": [
     "LivingEntityRendererMixin",
@@ -21,7 +23,8 @@
     "EnergySwirlLayerMixin",
     "WardenEmissiveLayerMixin",
     "CarriedBlockLayerMixin",
-    "IronGolemFlowerLayerMixin"
+    "IronGolemFlowerLayerMixin",
+    "MinecraftAttackMixin"
   ],
   "injectors": {
     "defaultRequire": 1

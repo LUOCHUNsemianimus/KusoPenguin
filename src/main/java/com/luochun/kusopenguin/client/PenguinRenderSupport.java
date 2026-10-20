@@ -18,6 +18,7 @@ public final class PenguinRenderSupport {
     }
 
     public static boolean shouldReplace(LivingEntity entity) {
+        if(PenguinDeathClient.rendering(entity))return true;
         if (!isSupportedType(entity.getType())) {
             return false;
         }

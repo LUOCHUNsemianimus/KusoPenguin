@@ -24,11 +24,11 @@ public final class PenguinRenderContext {
         Frame f=FRAMES.get().peek();if(f==null)return null;
         if(f.evaluated)return f.pose;f.evaluated=true;
         if(shared==null||!PenguinMeshPreview.isEnabled()||!PenguinRenderSupport.shouldReplace(f.entity))return null;
-        PenguinAction action=PenguinPoseClient.action(f.entity);if(action==null)return null;
+        PenguinAction action=PenguinDeathClient.rendering(f.entity)?PenguinAction.DEATH:PenguinPoseClient.action(f.entity);if(action==null)return null;
         PenguinAnimationClip clip=PenguinMeshModel.animationClip(action);if(clip==null)return null;
-        float age=PenguinPoseClient.age(f.entity,action,f.partial);
+        float age=PenguinDeathClient.rendering(f.entity)?PenguinDeathClient.age(f.entity,f.partial):PenguinPoseClient.age(f.entity,action,f.partial);
         if(age<0||age>=clip.totalDuration())return null;
-        PenguinAnimationClip.Sample sample=clip.sample(age);if(sample.weight()<=0)return null;
+        PenguinAnimationClip.Sample sample=action==PenguinAction.DEATH?clip.sampleTerminal(age):clip.sample(age);if(sample.weight()<=0)return null;
         PenguinPoseAdapter adapter=PenguinPoseAdapters.find(f.model);if(adapter==null)return null;
         shared.resetPose();adapter.apply(shared,f.model,f.entity);
         f.pose=PenguinAnimationPose.evaluate(action,clip,sample,shared,f.model);return f.pose;

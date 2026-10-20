@@ -79,6 +79,17 @@ public final class PenguinSkinnedMesh {
             faces.add(new Face(point(a,root),point(b,root),point(c,root),u,v));
         }
     }
+    
+    /** Exact deformed body bound for death-floor placement, using the same baked skin weights. */
+    float maxY(PenguinAnimationPose pose){
+        float max=Float.NEGATIVE_INFINITY;
+        Vector3f a=new Vector3f(),b=new Vector3f();
+        for(Point p:points){
+            a.set(p.x,p.y,p.z);b.set(a);pose.skin[p.a].transformPosition(a);pose.skin[p.b].transformPosition(b);
+            max=Math.max(max,a.y+(b.y-a.y)*p.weight);
+        }
+        return max;
+    }
     public void render(PoseStack stack,VertexConsumer buffer,int light,int overlay,int color,PenguinAnimationPose pose){
         for(int i=0;i<points.length;i++){
             Point p=points[i];scratchA.set(p.x,p.y,p.z);scratchB.set(scratchA);

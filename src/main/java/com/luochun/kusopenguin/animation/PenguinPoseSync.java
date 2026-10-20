@@ -16,7 +16,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 @EventBusSubscriber(modid=KusoPenguin.MODID,bus=EventBusSubscriber.Bus.GAME)
 public final class PenguinPoseSync {
-    private static final long PLAYER_KICK_COOLDOWN=36L;
+    private static final long PLAYER_KICK_COOLDOWN=60L;
     private static final long MOB_KICK_COOLDOWN=80L;
     private record State(PenguinAction action,long sequence,long started){
         boolean activeAt(long gameTime){return gameTime-started<action.durationTicks();}
@@ -32,23 +32,26 @@ public final class PenguinPoseSync {
     }
 
     /** Unified server state boundary for every action. */
-    public static void start(LivingEntity entity,PenguinAction action){
-        if(!(entity.level() instanceof ServerLevel level))return;
-        if(!entity.hasEffect(ModEffects.PENGUIN))return;
+    public static boolean start(LivingEntity entity,PenguinAction action){
+        if(!(entity.level() instanceof ServerLevel level))return false;
+        if(!entity.hasEffect(ModEffects.PENGUIN))return false;
         long now=level.getGameTime();
         State current=STATES.get(entity);
         if(current!=null&&!current.activeAt(now)){STATES.remove(entity);current=null;}
-        if(action==PenguinAction.FLYING_KICK&&onKickCooldown(entity,now))return;
-        if(current!=null&&action.priority()<=current.action().priority())return;
+        if(action==PenguinAction.FLYING_KICK&&onKickCooldown(entity,now))return false;
+        if(current!=null&&action.priority()<=current.action().priority())return false;
         State next=new State(action,SEQUENCE.incrementAndGet(),now);
         STATES.put(entity,next);
         if(action==PenguinAction.FLYING_KICK)KICK_COOLDOWNS.put(entity,now);
         PacketDistributor.sendToPlayersTrackingEntityAndSelf(entity,packet(entity,next,true));
+        return true;
     }
 
     public static void removed(LivingEntity entity){
         if(!(entity.level() instanceof ServerLevel level))return;
-        State old=STATES.remove(entity);
+        State old=STATES.get(entity);
+        if(old!=null&&old.action()==PenguinAction.DEATH)return;
+        STATES.remove(entity);
         PenguinAction action=old==null?PenguinAction.TAUNT:old.action();
         State s=new State(action,SEQUENCE.incrementAndGet(),level.getGameTime());
         PacketDistributor.sendToPlayersTrackingEntityAndSelf(entity,packet(entity,s,false));

@@ -1,34 +1,23 @@
 package com.luochun.kusopenguin.mixin;
-
-import com.luochun.kusopenguin.animation.PenguinActionTriggers;
+import com.luochun.kusopenguin.animation.PenguinKick;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
-
-/**
- * Reports only a confirmed vanilla player hit. Sprint/charge eligibility is captured before the
- * hurt call, which is invoked exactly once and its boolean result is returned unchanged.
- */
+import org.spongepowered.asm.mixin.injection.*;
+import org.spongepowered.asm.mixin.injection.callback.*;
 @Mixin(Player.class)
 public abstract class PlayerAttackMixin {
-    @Redirect(
-            method = "attack(Lnet/minecraft/world/entity/Entity;)V",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/world/entity/Entity;hurt(Lnet/minecraft/world/damagesource/DamageSource;F)Z"
-            )
-    )
-    private boolean kusoPenguin$flyingKick(Entity target, DamageSource source, float amount) {
-        Player player = (Player) (Object) this;
-        boolean wasSprinting = player.isSprinting();
-        float attackStrength = player.getAttackStrengthScale(0.5F);
-        boolean hit = target.hurt(source, amount);
-        if (hit) {
-            PenguinActionTriggers.playerHit(player, wasSprinting, attackStrength);
-        }
-        return hit;
+    @Inject(method="getAttackStrengthScale",at=@At("HEAD"),cancellable=true)
+    private void kusoPenguin$normalWeaponDamage(float partial,CallbackInfoReturnable<Float> ci){
+        if(PenguinKick.dispatching((Player)(Object)this))ci.setReturnValue(1F);
+    }
+    @Inject(method="attack",at=@At("HEAD"),cancellable=true)
+    private void kusoPenguin$oneAttackPath(Entity target,CallbackInfo ci){
+        Player p=(Player)(Object)this;if(PenguinKick.active(p)&&!PenguinKick.dispatching(p))ci.cancel();
+    }
+    @Redirect(method="attack",at=@At(value="INVOKE",target="Lnet/minecraft/world/entity/Entity;hurt(Lnet/minecraft/world/damagesource/DamageSource;F)Z"))
+    private boolean kusoPenguin$confirmedHit(Entity target,DamageSource source,float amount){
+        boolean hit=target.hurt(source,amount);PenguinKick.confirmedHit((Player)(Object)this,hit);return hit;
     }
 }
