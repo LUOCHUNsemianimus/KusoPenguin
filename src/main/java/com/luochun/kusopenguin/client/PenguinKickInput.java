@@ -29,6 +29,6 @@ public final class PenguinKickInput {
     public static void receive(PenguinKickMotion motion){
         var p=Minecraft.getInstance().player;
         if(p!=null&&p.level().dimension().location().equals(motion.dimension()))
-            PenguinKick.startLocal(p,new Vec3(motion.x(),motion.y(),motion.z()),new Vec3(motion.dx(),0,motion.dz()));
+            PenguinKick.startLocal(p,new Vec3(motion.x(),motion.y(),motion.z()),new Vec3(motion.dx(),0,motion.dz()),motion.distance());
     }
 }

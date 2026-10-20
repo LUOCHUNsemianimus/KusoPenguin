@@ -36,8 +36,7 @@ public final class PenguinBodyLayer<T extends LivingEntity, M extends EntityMode
             return;
         }
 
-        this.penguin.resetPose();
-        adapter.apply(this.penguin, this.getParentModel(), livingEntity);
+        PenguinRenderContext.prepareBody(this.penguin);
         PenguinMeshModel mesh = PenguinMeshPreview.isEnabled()
                 ? PenguinMeshModel.current()
                 : null;

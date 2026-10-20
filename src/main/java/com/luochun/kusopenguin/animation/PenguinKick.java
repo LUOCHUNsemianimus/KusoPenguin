@@ -3,9 +3,15 @@ package com.luochun.kusopenguin.animation;
 import com.luochun.kusopenguin.KusoPenguin;
 import com.luochun.kusopenguin.registry.ModEffects;
 import java.util.*;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.*;
+import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.attributes.DefaultAttributes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -20,15 +26,28 @@ import net.neoforged.neoforge.network.PacketDistributor;
 @EventBusSubscriber(modid=KusoPenguin.MODID,bus=EventBusSubscriber.Bus.GAME)
 public final class PenguinKick {
     public static final int TRAVEL_TICKS=12;
+    /** Vanilla's own ADD_MULTIPLIED_TOTAL modifier id on player movement speed. */
+    private static final ResourceLocation SPRINTING_SPEED_ID=ResourceLocation.fromNamespaceAndPath("minecraft","sprinting");
+    /** Headroom beyond the approved horizontal distance for the bounded-origin check. */
+    private static final double ORIGIN_SLACK=2;
+    /** Headroom beyond the largest approved per-tick step for the external-displacement check. */
+    private static final double STEP_SLACK=.5;
     private static final Map<LivingEntity,Flight> FLIGHTS=Collections.synchronizedMap(new WeakHashMap<>());
     private static final ThreadLocal<Mob> MOB_STRIKE=new ThreadLocal<>();
     private static final ThreadLocal<Player> ATTACKER=new ThreadLocal<>();
     private static final ThreadLocal<Boolean> HIT=ThreadLocal.withInitial(()->false);
     private static final class Flight {
         final Vec3 origin,dir; final double distance,height; final int started;
+        final double originBoundSqr,maxStepSqr;
         int step; boolean ended; final LivingEntity target; Vec3 previous; final Set<UUID> hit=new HashSet<>();
         Flight(LivingEntity e,Vec3 origin,Vec3 dir,double distance,double height){
             this.origin=origin;this.previous=e.position();this.dir=dir;this.distance=distance;this.height=height;this.started=e.tickCount;this.target=e instanceof Mob mob?mob.getTarget():null;
+            // Both safety bounds are derived from the server-approved distance so a legitimate
+            // boosted kick is not aborted; unboosted values stay at the old 6 / 1.5 scale.
+            double originBound=distance+ORIGIN_SLACK;
+            this.originBoundSqr=originBound*originBound;
+            double maxStep=distance/TRAVEL_TICKS+4*height/TRAVEL_TICKS+STEP_SLACK;
+            this.maxStepSqr=maxStep*maxStep;
         }
     }
     private PenguinKick(){}
@@ -48,15 +67,43 @@ public final class PenguinKick {
         if(e instanceof Player p&&(!p.isSprinting()||p.isCrouching()))return false;
         if(!PenguinPoseSync.start(e,PenguinAction.FLYING_KICK))return false;
         Vec3 look=e instanceof Mob m&&m.getTarget()!=null?m.getTarget().position().subtract(e.position()):e.getLookAngle();Vec3 dir=new Vec3(look.x,0,look.z).normalize();
-        double distance=e instanceof Player?4:independentMob(e)?3:1.5,height=e instanceof Player?1:.75;
+        double baseDistance=e instanceof Player?4:independentMob(e)?3:1.5,height=e instanceof Player?1:.75;
+        double distance=baseDistance*speedScale(e);
         FLIGHTS.put(e,new Flight(e,e.position(),dir,distance,height));
         e.fallDistance=0;
         if(e instanceof ServerPlayer p)PacketDistributor.sendToPlayer(p,new PenguinKickMotion(
-            e.level().dimension().location(),e.getX(),e.getY(),e.getZ(),dir.x,dir.z));
+            e.level().dimension().location(),e.getX(),e.getY(),e.getZ(),dir.x,dir.z,distance));
         return true;
     }
-    public static void startLocal(Player p,Vec3 origin,Vec3 direction){
-        if(p.level().isClientSide())FLIGHTS.put(p,new Flight(p,origin,direction,4,1));
+    /**
+     * Movement-speed multiplier relative to the entity type's default, with vanilla sprinting
+     * removed so ordinary sprint does not inflate the approved travel. Sampled once at activation.
+     */
+    @SuppressWarnings("unchecked")
+    static double speedScale(LivingEntity e){
+        AttributeInstance speed=e.getAttribute(Attributes.MOVEMENT_SPEED);
+        if(speed==null)return 1;
+        AttributeSupplier defaults=DefaultAttributes.getSupplier((EntityType<? extends LivingEntity>)e.getType());
+        if(!defaults.hasAttribute(Attributes.MOVEMENT_SPEED))return 1;
+        double baseline=defaults.getValue(Attributes.MOVEMENT_SPEED);
+        if(!(baseline>1.0E-9))return 1;
+        // Native AttributeInstance.calculateValue multiplies each total modifier in sequence.
+        // Re-evaluate without sprint instead of dividing a sum or temporarily mutating attributes.
+        double base=speed.getBaseValue();
+        for(AttributeModifier mod:speed.getModifiers())
+            if(mod.operation()==AttributeModifier.Operation.ADD_VALUE)base+=mod.amount();
+        double withoutSprint=base;
+        for(AttributeModifier mod:speed.getModifiers())
+            if(mod.operation()==AttributeModifier.Operation.ADD_MULTIPLIED_BASE)withoutSprint+=base*mod.amount();
+        for(AttributeModifier mod:speed.getModifiers())
+            if(mod.operation()==AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL&&!SPRINTING_SPEED_ID.equals(mod.id()))
+                withoutSprint*=1+mod.amount();
+        withoutSprint=speed.getAttribute().value().sanitizeValue(withoutSprint);
+        double scale=withoutSprint/baseline;
+        return Double.isFinite(scale)?Math.max(0,scale):1;
+    }
+    public static void startLocal(Player p,Vec3 origin,Vec3 direction,double distance){
+        if(p.level().isClientSide())FLIGHTS.put(p,new Flight(p,origin,direction,distance,1));
     }
     /** Called instead of ordinary travel only for the local player or a server-controlled mob. */
     public static boolean travel(LivingEntity e){
@@ -67,7 +114,7 @@ public final class PenguinKick {
         Vec3 next=f.origin.add(f.dir.scale(f.distance*t)).add(0,4*f.height*t*(1-t),0);
         Vec3 delta=next.subtract(e.position());
         // A server-approved start never permits catch-up teleports after external displacement.
-        if(delta.lengthSqr()>1.5*1.5){FLIGHTS.remove(e);return false;}
+        if(delta.lengthSqr()>f.maxStepSqr){FLIGHTS.remove(e);return false;}
         e.setDeltaMovement(delta);e.move(MoverType.SELF,delta);e.fallDistance=0;
         if(e.horizontalCollision||e.verticalCollision&&t<.5||f.step>=TRAVEL_TICKS){
             f.ended=true;if(e.level().isClientSide())FLIGHTS.remove(e);e.setDeltaMovement(Vec3.ZERO);
@@ -77,7 +124,7 @@ public final class PenguinKick {
     private static boolean valid(LivingEntity e,Flight f){
         return e.isAlive()&&!e.isRemoved()&&e.hasEffect(ModEffects.PENGUIN)&&!e.isPassenger()
             &&!e.isSwimming()&&!e.isFallFlying()&&e.tickCount-f.started<=TRAVEL_TICKS+5
-            &&e.position().distanceToSqr(f.origin)<=36;
+            &&e.position().distanceToSqr(f.origin)<=f.originBoundSqr;
     }
     public static boolean mayHit(Player p,LivingEntity target){
         if(target==p||!target.isAlive()||!target.isAttackable()||target.isSpectator()

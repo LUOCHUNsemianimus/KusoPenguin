@@ -136,6 +136,29 @@ public final class PenguinMeshModel {
                 this.leftFoot);
     }
 
+    /** Bounds of actual static mesh geometry under one current animation root, in model blocks. */
+    float maxY(ModelPart modelPart, String name) {
+        Part meshPart = switch(name) {
+            case "body" -> this.body;
+            case "right_foot" -> this.rightFoot;
+            case "left_foot" -> this.leftFoot;
+            default -> throw new IllegalArgumentException(name);
+        };
+        PoseStack stack = new PoseStack();modelPart.translateAndRotate(stack);
+        org.joml.Vector3f point = new org.joml.Vector3f();
+        float max = Float.NEGATIVE_INFINITY;
+        for(Triangle triangle:meshPart.triangles()) {
+            max=Math.max(max,transformedY(triangle.a(),stack.last().pose(),point));
+            max=Math.max(max,transformedY(triangle.b(),stack.last().pose(),point));
+            max=Math.max(max,transformedY(triangle.c(),stack.last().pose(),point));
+        }
+        return max;
+    }
+
+    private static float transformedY(Vertex vertex,org.joml.Matrix4fc matrix,org.joml.Vector3f point) {
+        point.set(vertex.x()/PIXEL,vertex.y()/PIXEL,vertex.z()/PIXEL);matrix.transformPosition(point);return point.y;
+    }
+
     private static void renderPart(PoseStack poseStack, VertexConsumer buffer, int packedLight,
                                    int packedOverlay, int color, ModelPart modelPart,
                                    Part meshPart) {
