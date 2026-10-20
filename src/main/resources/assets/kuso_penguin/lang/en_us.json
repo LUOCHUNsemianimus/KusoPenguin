@@ -10,5 +10,7 @@
   "mesh.kuso_penguin.quality.high": "High (492 triangles)",
   "mesh.kuso_penguin.quality.medium": "Medium (308 triangles)",
   "mesh.kuso_penguin.quality.low": "Low (200 triangles)",
-  "message.kuso_penguin.mesh_preview.quality": "Mesh preview: %1$s. Press %2$s to cycle to %3$s."
+  "message.kuso_penguin.mesh_preview.quality": "Mesh preview: %1$s. Press %2$s to cycle to %3$s.",
+  "commands.kuso_penguin.flyingkick.values": "%1$s's flying kick: damage multiplier %2$s, knockback level %3$s.",
+  "commands.kuso_penguin.flyingkick.updated": "Updated %1$s's flying kick: damage multiplier %2$s, knockback level %3$s."
 }

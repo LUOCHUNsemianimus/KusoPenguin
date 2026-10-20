@@ -16,7 +16,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 @EventBusSubscriber(modid=KusoPenguin.MODID,bus=EventBusSubscriber.Bus.GAME)
 public final class PenguinPoseSync {
-    private static final long PLAYER_KICK_COOLDOWN=60L;
+    public static final long PLAYER_KICK_COOLDOWN=60L;
     private static final long MOB_KICK_COOLDOWN=80L;
     private record State(PenguinAction action,long sequence,long started){
         boolean activeAt(long gameTime){return gameTime-started<action.durationTicks();}

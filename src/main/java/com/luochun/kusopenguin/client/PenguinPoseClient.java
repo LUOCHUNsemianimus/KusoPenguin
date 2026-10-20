@@ -26,6 +26,7 @@ public final class PenguinPoseClient {
         if(old!=null&&p.sequence()<old.sequence())return;
         ENTRIES.put(k,new Entry(p.entityId(),p.action(),p.sequence(),p.startedGameTime(),p.playing(),System.nanoTime()));
         PenguinDeathClient.receive(p);
+        PenguinKickInput.receive(p);
     }
     public static PenguinAction action(LivingEntity e){
         Entry s=entry(e);

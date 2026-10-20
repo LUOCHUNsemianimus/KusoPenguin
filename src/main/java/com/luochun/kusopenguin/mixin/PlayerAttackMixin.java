@@ -18,6 +18,6 @@ public abstract class PlayerAttackMixin {
     }
     @Redirect(method="attack",at=@At(value="INVOKE",target="Lnet/minecraft/world/entity/Entity;hurt(Lnet/minecraft/world/damagesource/DamageSource;F)Z"))
     private boolean kusoPenguin$confirmedHit(Entity target,DamageSource source,float amount){
-        boolean hit=target.hurt(source,amount);PenguinKick.confirmedHit((Player)(Object)this,hit);return hit;
+        boolean hit=target.hurt(source,PenguinKick.damage((Player)(Object)this,amount));PenguinKick.confirmedHit((Player)(Object)this,hit);return hit;
     }
 }

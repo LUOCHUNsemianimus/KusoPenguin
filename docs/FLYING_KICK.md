@@ -39,3 +39,45 @@ native monster damage unchanged, no bystander hit, natural tick-based selection,
 59/60 and 79/80, real scoreboard allies, server PVP disabled/enabled, knockback strength 1.0.
 These are live acceptance probes, not Gradle unit tests (`test` is `NO-SOURCE`). Dedicated-server
 latency and third-party combat rewrites have not been exhaustively tested. No new shader benchmark.
+# Cooldown fallback / 冷却期间普通攻击
+
+飞踢拥有独立的 60 tick（3 秒）冷却。客户端依据服务端确认的动作开始时间判断，
+冷却期间的疾跑点击回到原版攻击，包括重新疾跑后的猛击；普通攻击不会刷新飞踢冷却。
+仅飞踢实际位移期间仍避免重复的普通命中，不把整个动画或冷却当作普通攻击禁用期。
+离地、潜行、骑乘等无法启动飞踢的状态同样保留原版攻击入口。
+
+The server-confirmed kick start owns a separate 60-tick cooldown. Sprint attacks during that
+cooldown use vanilla attack handling, including sprint knockback after resuming a sprint, and
+do not restart the kick cooldown. Only the actual kick travel prevents duplicate ordinary hits.
+
+
+## Player skill commands / 玩家技能指令
+
+Requires operator permission level 2. Omit the target to change yourself; console must specify
+a target. Targets are online player names or selectors. Settings are stored per UUID in the
+world's overworld SavedData, surviving death, dimension changes, reconnects and world reloads.
+These commands change only player flying kicks, not ordinary attacks or mob kicks.
+
+需要管理员权限等级 2；省略目标时修改自己，控制台必须指定目标。支持在线玩家名和选择器。
+按玩家 UUID 保存在当前世界，死亡、换维度、重登和重启存档后保留。仅影响玩家飞踢。
+
+```mcfunction
+/kusopenguin flyingkick
+/kusopenguin flyingkick get @p
+/kusopenguin flyingkick damage 2
+/kusopenguin flyingkick damage 2 @a
+/kusopenguin flyingkick knockback 3
+/kusopenguin flyingkick reset @p
+```
+
+- `damage`: multiplier from 0 to 100, default 1. Applied once to native weapon and enchantment
+  damage before armor/resistance. This is a multiplier, not a Sharpness level.
+- `knockback`: integer enchantment-equivalent level from 0 to 20, default 2. Each level gives
+  0.5 knockback strength, subject to target resistance. This replaces the skill's fixed level II;
+  it does not add a second native weapon knockback impulse or enchant/change held items.
+- `reset`: restores damage 1 and knockback 2 for the selected player(s).
+
+`damage` 为 0–100 倍（默认 1），对武器及原有附魔算出的伤害乘一次，再进行护甲等结算，
+不是锋利附魔等级。`knockback` 为 0–20 的整数等级（默认 2），每级强度 0.5，
+仍受目标击退抗性影响；替换技能原先固定的击退 II，不额外叠加一遍武器击退，也不改手持物品。
+`reset` 恢复默认值。飞踢冷却和范围规则不变。
