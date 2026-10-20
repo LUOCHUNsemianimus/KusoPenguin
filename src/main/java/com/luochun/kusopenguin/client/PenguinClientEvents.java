@@ -25,6 +25,7 @@ public final class PenguinClientEvents {
     public static void addLayers(EntityRenderersEvent.AddLayers event) {
         PenguinBodyModel penguin = new PenguinBodyModel(
                 event.getEntityModels().bakeLayer(PenguinBodyModel.LAYER));
+        PenguinRenderContext.setModel(penguin);
 
         for (PlayerSkin.Model skin : event.getSkins()) {
             PlayerRenderer renderer = event.getSkin(skin);
@@ -38,6 +39,13 @@ public final class PenguinClientEvents {
         addLayer(event.getRenderer(EntityType.VILLAGER), penguin);
         addLayer(event.getRenderer(EntityType.PIGLIN), penguin);
         addLayer(event.getRenderer(EntityType.ZOMBIFIED_PIGLIN), penguin);
+        addLayer(event.getRenderer(EntityType.CREEPER), penguin);
+        addLayer(event.getRenderer(EntityType.ENDERMAN), penguin);
+        addLayer(event.getRenderer(EntityType.WITHER_SKELETON), penguin);
+        addLayer(event.getRenderer(EntityType.ZOMBIE_VILLAGER), penguin);
+        addLayer(event.getRenderer(EntityType.IRON_GOLEM), penguin);
+        addLayer(event.getRenderer(EntityType.WARDEN), penguin);
+
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})

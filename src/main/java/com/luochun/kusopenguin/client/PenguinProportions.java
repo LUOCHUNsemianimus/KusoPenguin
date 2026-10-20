@@ -3,60 +3,51 @@ package com.luochun.kusopenguin.client;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.VillagerModel;
+import net.minecraft.client.model.CreeperModel;
+import net.minecraft.client.model.EndermanModel;
+import net.minecraft.client.model.IronGolemModel;
+import net.minecraft.client.model.WardenModel;
+import net.minecraft.client.model.ZombieVillagerModel;
 
-/**
- * The single source of truth for the chibi preview proportions.
- *
- * <p>The original model keeps its head size. Only the headless body is scaled, around the
- * original foot plane {@code Y = 24}, and the head is translated down by the same amount the
- * body shrank. Total visible height therefore becomes {@code TOTAL_HEADS} original head heights.
- * Measuring uses the core head cube only: hat, ears and the villager nose are decorations.
- */
+/** Head size stays native; neck and floor anchors are explicit for each model family. */
 public final class PenguinProportions {
-    /** Visible total height in original head heights. Change this one value for another ratio. */
     public static final float TOTAL_HEADS = 2.5F;
-    /** Neck-to-foot model height of both supported vanilla model families. */
     public static final float REFERENCE_BODY_HEIGHT = 24.0F;
-    /** Model-space Y of the foot plane; scaling must keep this plane fixed. */
     public static final float FOOT_Y = 24.0F;
-    /** Core head cube height of HumanoidModel and its player/skeleton/zombie/piglin subclasses. */
     public static final float HUMANOID_HEAD_HEIGHT = 8.0F;
-    /** Core head cube height of VillagerModel. */
     public static final float VILLAGER_HEAD_HEIGHT = 10.0F;
 
-    private PenguinProportions() {
-    }
+    private PenguinProportions() {}
 
-    /**
-     * Returns the profile for a supported original model, or {@code null} when the model family
-     * has no proportions contract. Callers keep their existing model-family checks.
-     */
     public static Profile forModel(EntityModel<?> model) {
-        if (model instanceof VillagerModel<?>) {
-            return Profile.of(VILLAGER_HEAD_HEIGHT);
-        }
-        if (model instanceof HumanoidModel<?>) {
-            return Profile.of(HUMANOID_HEAD_HEIGHT);
-        }
+        // These two inherit HumanoidModel but have different head/floor geometry.
+        // Enderman legs end at Y=25, one pixel below the actual renderer ground plane.
+        // Anchor our short feet at Y=24 so they remain visible above the terrain.
+        if (model instanceof EndermanModel<?>) return chibi(8, -13, FOOT_Y);
+        if (model instanceof ZombieVillagerModel<?>) return chibi(10, 0, FOOT_Y);
+        if (model instanceof CreeperModel<?>) return chibi(8, 6, FOOT_Y);
+        // Keep the native neck-to-floor span of these large mobs.
+        if (model instanceof IronGolemModel<?>) return profile(10, -9, 24, 33);
+        if (model instanceof WardenModel<?>) return profile(16, -10, 24, 34);
+        if (model instanceof VillagerModel<?>) return chibi(10, 0, FOOT_Y);
+        if (model instanceof HumanoidModel<?>) return chibi(8, 0, FOOT_Y);
         return null;
     }
 
-    /**
-     * Derived values in model pixels. {@code bodyHeight} is the headless neck-to-foot span after
-     * scaling, {@code bodyScale} is its ratio to the original 24-pixel span, and {@code headDrop}
-     * is how far the unchanged head moves down to sit on the scaled body.
-     */
-    public record Profile(float headHeight, float bodyHeight, float bodyScale, float headDrop) {
-        private static Profile of(float headHeight) {
-            float bodyHeight = (TOTAL_HEADS - 1.0F) * headHeight;
-            float bodyScale = bodyHeight / REFERENCE_BODY_HEIGHT;
-            float headDrop = FOOT_Y - bodyHeight;
-            return new Profile(headHeight, bodyHeight, bodyScale, headDrop);
-        }
+    private static Profile chibi(float headHeight, float neckY, float footY) {
+        return profile(headHeight, neckY, footY, (TOTAL_HEADS - 1.0F) * headHeight);
+    }
 
-        /** The head translation in PoseStack blocks (16 model pixels per block). */
-        public float headDropBlocks() {
-            return this.headDrop / 16.0F;
-        }
+    private static Profile profile(float headHeight, float neckY, float footY, float bodyHeight) {
+        float offset = footY - bodyHeight;
+        return new Profile(headHeight, bodyHeight, bodyHeight / REFERENCE_BODY_HEIGHT,
+                offset - neckY, offset, footY);
+    }
+
+    /** Model-pixel coordinates, before the living renderer's own scale/rotation. */
+    public record Profile(float headHeight, float bodyHeight, float bodyScale, float headDrop,
+                          float bodyOffset, float footY) {
+        public float headDropBlocks() { return headDrop / 16.0F; }
+        public float bodyOffsetBlocks() { return bodyOffset / 16.0F; }
     }
 }

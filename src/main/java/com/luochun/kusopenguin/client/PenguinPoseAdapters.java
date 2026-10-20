@@ -1,5 +1,8 @@
 package com.luochun.kusopenguin.client;
 
+import net.minecraft.client.model.CreeperModel;
+import net.minecraft.client.model.IronGolemModel;
+import net.minecraft.client.model.WardenModel;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.VillagerModel;
@@ -19,6 +22,9 @@ public final class PenguinPoseAdapters {
     }
 
     public static PenguinPoseAdapter find(EntityModel<?> original) {
+        if (original instanceof WardenModel<?>) return PenguinWardenPose::apply;
+        if (original instanceof CreeperModel<?>) return PenguinPoseAdapters::applyCreeper;
+        if (original instanceof IronGolemModel<?>) return PenguinPoseAdapters::applyGolem;
         if (original instanceof VillagerModel<?>) {
             return PenguinPoseAdapters::applyVillager;
         }
@@ -26,6 +32,26 @@ public final class PenguinPoseAdapters {
             return PenguinPoseAdapters::applyHumanoid;
         }
         return null;
+    }
+
+    private static void applyCreeper(PenguinBodyModel penguin, EntityModel<?> original,
+                                     LivingEntity entity) {
+        ModelPart root = ((CreeperModel<?>) original).root();
+        copyPart(root.getChild("body"), penguin.body());
+        // The vanilla model pairs diagonal legs. Use its two hind-leg phases for our two feet.
+        copyPart(root.getChild("left_hind_leg"), penguin.rightFoot());
+        copyPart(root.getChild("right_hind_leg"), penguin.leftFoot());
+        // A creeper has no animated arms; retain the penguin wings' resting bind pose.
+    }
+
+    private static void applyGolem(PenguinBodyModel penguin, EntityModel<?> original,
+                                   LivingEntity entity) {
+        ModelPart root = ((IronGolemModel<?>) original).root();
+        copyPart(root.getChild("body"), penguin.body());
+        copyPart(root.getChild("right_arm"), penguin.rightWing());
+        copyPart(root.getChild("left_arm"), penguin.leftWing());
+        copyPart(root.getChild("right_leg"), penguin.rightFoot());
+        copyPart(root.getChild("left_leg"), penguin.leftFoot());
     }
 
     private static void applyHumanoid(PenguinBodyModel penguin, EntityModel<?> original,

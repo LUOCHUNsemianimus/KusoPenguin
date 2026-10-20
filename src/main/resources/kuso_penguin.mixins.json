@@ -14,7 +14,12 @@
     "CapeLayerMixin",
     "ElytraLayerMixin",
     "ParrotOnShoulderLayerMixin",
-    "StuckInBodyLayerMixin"
+    "StuckInBodyLayerMixin",
+    "EyesLayerMixin",
+    "EnergySwirlLayerMixin",
+    "WardenEmissiveLayerMixin",
+    "CarriedBlockLayerMixin",
+    "IronGolemFlowerLayerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -16,7 +16,9 @@ public final class PenguinRenderSupport {
             EntityType.ZOMBIE,
             EntityType.VILLAGER,
             EntityType.PIGLIN,
-            EntityType.ZOMBIFIED_PIGLIN
+            EntityType.ZOMBIFIED_PIGLIN,
+            EntityType.CREEPER, EntityType.ENDERMAN, EntityType.WITHER_SKELETON,
+            EntityType.ZOMBIE_VILLAGER, EntityType.IRON_GOLEM, EntityType.WARDEN
     );
 
     private PenguinRenderSupport() {

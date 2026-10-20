@@ -1,6 +1,7 @@
 package com.luochun.kusopenguin;
 
 import com.luochun.kusopenguin.registry.ModEffects;
+import com.luochun.kusopenguin.animation.PenguinPoseSync;
 import net.minecraft.network.protocol.game.ClientboundUpdateMobEffectPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -29,6 +30,7 @@ public final class EffectTrackingEvents {
         MobEffectInstance effect = target.getEffect(ModEffects.PENGUIN);
         if (effect != null) {
             player.connection.send(new ClientboundUpdateMobEffectPacket(target.getId(), effect, false));
+            PenguinPoseSync.snapshot(target,player);
         }
     }
 }

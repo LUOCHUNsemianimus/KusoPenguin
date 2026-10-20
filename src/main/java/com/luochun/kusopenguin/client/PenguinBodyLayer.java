@@ -44,13 +44,16 @@ public final class PenguinBodyLayer<T extends LivingEntity, M extends EntityMode
         VertexConsumer vertexConsumer = buffer.getBuffer(RenderType.entityCutoutNoCull(
                 mesh != null ? PenguinMeshModel.TEXTURE : PenguinBodyModel.TEXTURE));
         int packedOverlay = LivingEntityRenderer.getOverlayCoords(livingEntity, 0.0F);
-        // Equivalent to scaling around the original foot plane Y=24: translate then scale maps
-        // a model-space point p to s*p + (0, headDrop, 0), so the feet stay at Y=24.
+        // Each family has an explicit neck and floor anchor; head shift and body offset
+        // differ when the native head is not attached at model Y=0.
         poseStack.pushPose();
         try {
-            poseStack.translate(0.0F, profile.headDropBlocks(), 0.0F);
+            poseStack.translate(0.0F, profile.bodyOffsetBlocks(), 0.0F);
             poseStack.scale(profile.bodyScale(), profile.bodyScale(), profile.bodyScale());
-            if (mesh != null) {
+            PenguinAnimationPose animated=PenguinRenderContext.pose();
+            if(mesh!=null&&animated!=null){
+                PenguinMeshModel.currentSkin().render(poseStack,vertexConsumer,packedLight,packedOverlay,-1,animated);
+            } else if (mesh != null) {
                 mesh.render(poseStack, vertexConsumer, packedLight, packedOverlay, -1, this.penguin);
             } else {
                 this.penguin.renderToBuffer(poseStack, vertexConsumer, packedLight, packedOverlay, -1);

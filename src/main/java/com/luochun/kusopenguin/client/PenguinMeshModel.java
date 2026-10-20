@@ -60,7 +60,10 @@ public final class PenguinMeshModel {
     private static final double NORMAL_LENGTH_EPSILON = 1.0E-9D;
 
     private static final ReloadListener RELOAD_LISTENER = new ReloadListener();
-    private static volatile Map<PenguinMeshPreview.Quality, PenguinMeshModel> cache;
+    private record Loaded(Map<PenguinMeshPreview.Quality,PenguinMeshModel> meshes,
+                          Map<PenguinMeshPreview.Quality,PenguinSkinnedMesh> skins,
+                          PenguinAnimationClip clip) {}
+    private static volatile Loaded cache;
 
     private final Part body;
     private final Part rightWing;
@@ -83,7 +86,7 @@ public final class PenguinMeshModel {
      * observable; the body layer decides whether to draw it.
      */
     public static PenguinMeshModel current() {
-        Map<PenguinMeshPreview.Quality, PenguinMeshModel> loaded = cache;
+        Loaded loaded = cache;
         if (loaded == null) {
             return null;
         }
@@ -91,10 +94,18 @@ public final class PenguinMeshModel {
         if (quality == PenguinMeshPreview.Quality.BLOCK) {
             quality = PenguinMeshPreview.Quality.HIGH;
         }
-        return loaded.get(quality);
+        return loaded.meshes().get(quality);
     }
 
-    public static SimplePreparableReloadListener<Map<PenguinMeshPreview.Quality, PenguinMeshModel>>
+    List<Part> animationParts(){return List.of(body,rightWing,leftWing,rightFoot,leftFoot);}
+
+    public static PenguinAnimationClip animationClip(){Loaded loaded=cache;return loaded==null?null:loaded.clip();}
+    public static PenguinSkinnedMesh currentSkin(){
+        Loaded loaded=cache;
+        return loaded==null||!PenguinMeshPreview.isEnabled()?null:loaded.skins().get(PenguinMeshPreview.quality());
+    }
+
+    public static SimplePreparableReloadListener<Loaded>
             reloadListener() {
         return RELOAD_LISTENER;
     }
@@ -335,16 +346,16 @@ public final class PenguinMeshModel {
         return new Vertex(result[0], result[1], result[2], 0.0F, 0.0F, 0.0F, 0.0F, 0.0F);
     }
 
-    private record Vertex(float x, float y, float z, float u, float v,
+    record Vertex(float x, float y, float z, float u, float v,
                           float nx, float ny, float nz) {
     }
 
-    private record Triangle(Vertex a, Vertex b, Vertex c) {
+    record Triangle(Vertex a, Vertex b, Vertex c) {
     }
 
-    private record Part(String name, float pivotX, float pivotY, float pivotZ,
+    record Part(String name, float pivotX, float pivotY, float pivotZ,
                         List<Triangle> triangles) {
-        private Part {
+        Part {
             Objects.requireNonNull(name, "name");
             Objects.requireNonNull(triangles, "triangles");
             triangles = Collections.unmodifiableList(triangles);
@@ -357,10 +368,9 @@ public final class PenguinMeshModel {
      * installing a partial map or silently falling back to another tier.
      */
     private static final class ReloadListener
-            extends SimplePreparableReloadListener<
-            Map<PenguinMeshPreview.Quality, PenguinMeshModel>> {
+            extends SimplePreparableReloadListener<Loaded> {
         @Override
-        protected Map<PenguinMeshPreview.Quality, PenguinMeshModel> prepare(
+        protected Loaded prepare(
                 ResourceManager resourceManager, ProfilerFiller profiler) {
             try {
                 Map<PenguinMeshPreview.Quality, PenguinMeshModel> parsed =
@@ -375,7 +385,16 @@ public final class PenguinMeshModel {
                         parsed.put(entry.getKey(), parse(reader));
                     }
                 }
-                return Map.copyOf(parsed);
+                ResourceLocation clipLocation=ResourceLocation.fromNamespaceAndPath("kuso_penguin","animations/taunt.json");
+                Resource clipResource=resourceManager.getResource(clipLocation)
+                        .orElseThrow(()->new IOException("Missing animation "+clipLocation));
+                PenguinAnimationClip clip;
+                try(Reader reader=new InputStreamReader(clipResource.open(),StandardCharsets.UTF_8)){
+                    clip=PenguinAnimationClip.parse(reader);
+                }
+                Map<PenguinMeshPreview.Quality,PenguinSkinnedMesh> skins=new EnumMap<>(PenguinMeshPreview.Quality.class);
+                for(var entry:parsed.entrySet())skins.put(entry.getKey(),PenguinSkinnedMesh.bake(entry.getValue(),clip));
+                return new Loaded(Map.copyOf(parsed),Map.copyOf(skins),clip);
             } catch (IOException | RuntimeException exception) {
                 LOGGER.error("Failed to load experimental penguin mesh tiers {}", MODELS.values(),
                         exception);
@@ -385,7 +404,7 @@ public final class PenguinMeshModel {
         }
 
         @Override
-        protected void apply(Map<PenguinMeshPreview.Quality, PenguinMeshModel> models,
+        protected void apply(Loaded models,
                              ResourceManager resourceManager, ProfilerFiller profiler) {
             cache = models;
         }

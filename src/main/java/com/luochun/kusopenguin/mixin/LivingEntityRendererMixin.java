@@ -3,6 +3,9 @@ package com.luochun.kusopenguin.mixin;
 import com.luochun.kusopenguin.client.PenguinHeadRenderer;
 import com.luochun.kusopenguin.client.PenguinProportions;
 import com.luochun.kusopenguin.client.PenguinRenderSupport;
+import com.luochun.kusopenguin.client.PenguinRenderContext;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.model.EntityModel;
@@ -23,6 +26,15 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 public abstract class LivingEntityRendererMixin {
     @Shadow
     public abstract EntityModel<?> getModel();
+
+    @Inject(method="render(Lnet/minecraft/world/entity/LivingEntity;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",at=@At("HEAD"))
+    private void kusoPenguin$beginPose(LivingEntity entity,float yaw,float partial,PoseStack stack,MultiBufferSource buffers,int light,CallbackInfo ci){
+        PenguinRenderContext.push(entity,this.getModel(),partial);
+    }
+    @Inject(method="render(Lnet/minecraft/world/entity/LivingEntity;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",at=@At("RETURN"))
+    private void kusoPenguin$endPose(LivingEntity entity,float yaw,float partial,PoseStack stack,MultiBufferSource buffers,int light,CallbackInfo ci){
+        PenguinRenderContext.pop();
+    }
 
     @Redirect(
             method = "render(Lnet/minecraft/world/entity/LivingEntity;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",
@@ -77,6 +89,7 @@ public abstract class LivingEntityRendererMixin {
         }
         poseStack.pushPose();
         try {
+            PenguinRenderContext.applyHead(poseStack);
             poseStack.translate(0.0F, profile.headDropBlocks(), 0.0F);
             layer.render(poseStack, buffer, packedLight, layerEntity, limbSwing,
                     limbSwingAmount, partialTick, ageInTicks, netHeadYaw, headPitch);

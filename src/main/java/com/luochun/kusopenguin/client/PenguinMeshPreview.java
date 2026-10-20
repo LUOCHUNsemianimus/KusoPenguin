@@ -50,7 +50,7 @@ public final class PenguinMeshPreview {
             InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_F8,
             "key.categories.kuso_penguin");
-    private static Quality quality = Boolean.getBoolean(ENABLE_PROPERTY) ? Quality.HIGH : Quality.BLOCK;
+    private static Quality quality = "false".equalsIgnoreCase(System.getProperty(ENABLE_PROPERTY)) ? Quality.BLOCK : Quality.HIGH;
 
     private PenguinMeshPreview() {
     }

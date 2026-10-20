@@ -1,6 +1,7 @@
 package com.luochun.kusopenguin.mixin;
 
 import com.luochun.kusopenguin.registry.ModEffects;
+import com.luochun.kusopenguin.animation.PenguinPoseSync;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundRemoveMobEffectPacket;
 import net.minecraft.network.protocol.game.ClientboundUpdateMobEffectPacket;
@@ -26,6 +27,7 @@ public abstract class LivingEntityEffectSyncMixin {
     private void kusoPenguin$syncAddedEffect(MobEffectInstance effectInstance, Entity source,
                                              CallbackInfo callback) {
         this.kusoPenguin$broadcastEffect(effectInstance, false);
+        if(effectInstance.getEffect().value()==ModEffects.PENGUIN.value())PenguinPoseSync.started((LivingEntity)(Object)this);
     }
 
     @Inject(
@@ -43,6 +45,7 @@ public abstract class LivingEntityEffectSyncMixin {
     )
     private void kusoPenguin$syncRemovedEffect(MobEffectInstance effectInstance, CallbackInfo callback) {
         this.kusoPenguin$broadcastEffect(effectInstance, true);
+        if(effectInstance.getEffect().value()==ModEffects.PENGUIN.value())PenguinPoseSync.removed((LivingEntity)(Object)this);
     }
 
     private void kusoPenguin$broadcastEffect(MobEffectInstance effectInstance, boolean removed) {
