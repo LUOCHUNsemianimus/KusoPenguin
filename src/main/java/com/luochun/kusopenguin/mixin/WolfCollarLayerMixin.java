@@ -35,7 +35,7 @@ public abstract class WolfCollarLayerMixin {
                                                   float limbSwingAmount, float partialTicks,
                                                   float ageInTicks, float netHeadYaw,
                                                   float headPitch) {
-        if (PenguinRenderSupport.isProne(livingEntity)
+        if (PenguinRenderSupport.shouldReplace(livingEntity)
                 && PenguinHeadRenderer.renderHead(model, poseStack, buffer, packedLight,
                 packedOverlay, color)) {
             return;

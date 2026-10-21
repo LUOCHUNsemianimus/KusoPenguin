@@ -10,7 +10,7 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 public final class PenguinPoseNetwork {
     private PenguinPoseNetwork(){}
     @SubscribeEvent public static void register(RegisterPayloadHandlersEvent event){
-        var registrar=event.registrar("4");
+        var registrar=event.registrar("5");
         registrar.playToServer(PenguinKickRequest.TYPE,PenguinKickRequest.STREAM_CODEC,
             (payload,context)->context.enqueueWork(()->PenguinKick.tryStart(context.player())));
         registrar.playToClient(PenguinKickMotion.TYPE,PenguinKickMotion.STREAM_CODEC,

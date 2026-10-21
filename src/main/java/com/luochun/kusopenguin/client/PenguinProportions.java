@@ -34,6 +34,22 @@ public final class PenguinProportions {
         return null;
     }
 
+    /** Native head dimensions stay unchanged; only the dancing body becomes upright. */
+    public static Profile dancingForModel(EntityModel<?> model) {
+        Profile upright=forModel(model);
+        if(upright!=null)return upright;
+        float height;
+        if(model instanceof net.minecraft.client.model.CowModel<?>)height=8;
+        else if(model instanceof net.minecraft.client.model.SheepModel<?>||model instanceof net.minecraft.client.model.SheepFurModel<?>)height=6;
+        else if(model instanceof net.minecraft.client.model.PigModel<?>)height=8;
+        else if(model instanceof net.minecraft.client.model.CatModel<?>)height=4;
+        else if(model instanceof net.minecraft.client.model.WolfModel<?>)height=6;
+        else if(model instanceof net.minecraft.client.model.SpiderModel<?>)height=8;
+        else return null;
+        var head=PenguinHeadRenderer.headPart(model);
+        return head==null?null:chibi(height,head.getInitialPose().y,FOOT_Y);
+    }
+
     private static Profile chibi(float headHeight, float neckY, float footY) {
         return profile(headHeight, neckY, footY, (TOTAL_HEADS - 1.0F) * headHeight);
     }

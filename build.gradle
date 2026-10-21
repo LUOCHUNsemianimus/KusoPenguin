@@ -7,8 +7,22 @@ version = mod_version
 group = mod_group_id
 base { archivesName = mod_id }
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
-repositories { mavenCentral() }
+repositories {
+    mavenCentral()
+    // This decoder is published on Central. Skip NeoForge/Mojang probes for it: an
+    // unreachable earlier repository otherwise stalls ordinary online build/runClient.
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'KusoAudioMavenCentral'
+                url = uri('https://repo.maven.apache.org/maven2/')
+            }
+        }
+        filter { includeModule('javazoom', 'jlayer') }
+    }
+}
 sourceSets.main.resources { exclude '**/*.bbmodel' }
+
 neoForge {
     version = project.neo_version
     parchment {
@@ -25,4 +39,20 @@ neoForge {
     }
     mods { "${mod_id}" { sourceSet(sourceSets.main) } }
 }
+
+dependencies {
+    jarJar(implementation("javazoom:jlayer")) {
+        version {
+            strictly "[1.0.1]"
+            prefer "1.0.1"
+        }
+    }
+    additionalRuntimeClasspath "javazoom:jlayer:1.0.1"
+}
+
 tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+
+// Keep decoder attribution and its source location available in the standalone mod JAR.
+tasks.named('processResources') {
+    from('THIRD_PARTY_NOTICES.md') { into 'META-INF' }
+}

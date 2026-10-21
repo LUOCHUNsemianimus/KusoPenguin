@@ -32,6 +32,12 @@ public final class PenguinHeldItemRenderer {
     private PenguinHeldItemRenderer() {
     }
 
+    static Vector3f visibleTipOffset(boolean positiveWing) {
+        Vector3f offset=new Vector3f(ACTIVE_TIP_OFFSET);
+        if(!positiveWing)offset.x=-offset.x;
+        return offset;
+    }
+
     /**
      * Appends the current wing-end frame to the layer's pose stack. The vanilla trailing
      * XP(-90)/YP(180)/translate sequence stays untouched; its fixed translation is pre-subtracted

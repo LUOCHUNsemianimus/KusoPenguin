@@ -48,6 +48,26 @@ public final class PenguinAnimationPose {
             }
         }
     }
+    static PenguinAnimationPose fromDance(Matrix4f[] matrices,Matrix4f headDelta,PenguinAnimationClip bindClip){
+        if(matrices==null||matrices.length!=PenguinRig.COUNT){
+            throw new IllegalArgumentException("dance world matrices must have "+PenguinRig.COUNT
+                    +" entries, got "+(matrices==null?"null":matrices.length));
+        }
+        if(headDelta==null)throw new IllegalArgumentException("dance headDelta must not be null");
+        if(bindClip==null)throw new IllegalArgumentException("dance bindClip must not be null");
+        for(int i=0;i<matrices.length;i++){
+            if(matrices[i]==null)throw new IllegalArgumentException("dance world matrix "+i+" must not be null");
+        }
+        return new PenguinAnimationPose(1f,matrices,headDelta,bindClip);
+    }
+    private PenguinAnimationPose(float weight,Matrix4f[] matrices,Matrix4f headDelta,PenguinAnimationClip bindClip){
+        this.weight=weight;
+        for(int i=0;i<world.length;i++){
+            world[i]=new Matrix4f(matrices[i]);
+            skin[i]=new Matrix4f(world[i]).translate(bindClip.bind(i).negate());
+        }
+        this.headDelta=new Matrix4f(headDelta);
+    }
     public static PenguinAnimationPose evaluate(PenguinAnimationClip clip,PenguinAnimationClip.Sample sample,
                                                 PenguinBodyModel parts,EntityModel<?> original) {
         return evaluate(PenguinAction.TAUNT,clip,sample,parts,original);

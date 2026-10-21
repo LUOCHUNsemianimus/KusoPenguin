@@ -83,7 +83,7 @@ public abstract class LivingEntityRendererMixin {
                                              MultiBufferSource originalBuffer, int originalLight) {
         // Body-only overlays are incompatible with the horizontal body. Suppress them only while
         // the prone replacement is active; effect removal restores the complete vanilla layers.
-        if (PenguinRenderSupport.isProne(entity)
+        if ((PenguinRenderSupport.isProne(entity) || PenguinRenderContext.isDanceFrame(entity))
                 && (layer instanceof SaddleLayer<?, ?> || layer instanceof WolfArmorLayer)) {
             return;
         }
@@ -107,7 +107,7 @@ public abstract class LivingEntityRendererMixin {
         }
         PenguinProportions.Profile profile = PenguinRenderSupport.shouldReplace(entity)
                 && isOffsetHeadLayer(layer)
-                ? PenguinProportions.forModel(this.getModel())
+                ? PenguinRenderContext.profile(this.getModel())
                 : null;
         if (profile == null) {
             layer.render(poseStack, buffer, packedLight, layerEntity, limbSwing,

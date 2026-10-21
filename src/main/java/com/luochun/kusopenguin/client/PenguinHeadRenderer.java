@@ -55,7 +55,7 @@ public final class PenguinHeadRenderer {
     }
 
     static Matrix4f headMatrix(EntityModel<?> model){
-        PenguinProportions.Profile profile=PenguinProportions.forModel(model);
+        PenguinProportions.Profile profile=PenguinRenderContext.profile(model);
         if(profile==null)return new Matrix4f();
         PoseStack stack=new PoseStack();
         stack.translate(0,profile.headDropBlocks(),0);
@@ -74,7 +74,7 @@ public final class PenguinHeadRenderer {
     
     /** Head-only native geometry bound, including noses, hats, horns and head children. */
     static float maxY(EntityModel<?> model,Matrix4f delta){
-        PenguinProportions.Profile profile=PenguinProportions.forModel(model);
+        PenguinProportions.Profile profile=PenguinRenderContext.profile(model);
         if(profile==null)throw new IllegalArgumentException("Unsupported death head");
         PoseStack stack=new PoseStack();stack.mulPose(delta);
         stack.translate(0,profile.headDropBlocks(),0);
@@ -102,7 +102,7 @@ public final class PenguinHeadRenderer {
     public static boolean renderHead(EntityModel<?> model, PoseStack poseStack,
                                      VertexConsumer buffer, int packedLight,
                                      int packedOverlay, int color) {
-        PenguinProportions.Profile profile = PenguinProportions.forModel(model);
+        PenguinProportions.Profile profile = PenguinRenderContext.profile(model);
         if (profile == null) {
             // Quadruped/spider families have no penguin proportion profile; they keep their native
             // head and are only translated by the prone head anchor.

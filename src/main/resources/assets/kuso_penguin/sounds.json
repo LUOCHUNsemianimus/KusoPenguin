@@ -1,0 +1,10 @@
+{
+  "custom_music": {
+    "sounds": [
+      {
+        "name": "kuso_penguin:custom_music",
+        "stream": true
+      }
+    ]
+  }
+}

@@ -16,6 +16,7 @@ public final class PenguinRenderContext {
         final LivingEntity entity;final EntityModel<?> model;final float partial;
         boolean evaluated;PenguinAnimationPose pose;
         boolean postureEvaluated;PenguinPlayerPosture posture;
+        boolean danceEvaluated,dancing;
         Frame(LivingEntity entity,EntityModel<?> model,float partial){this.entity=entity;this.model=model;this.partial=partial;}
     }
     private PenguinRenderContext(){}
@@ -29,6 +30,31 @@ public final class PenguinRenderContext {
         f.posture=PenguinPlayerPosture.of(f.entity,f.model,PenguinProportions.forModel(f.model),shared);
         return f.posture;
     }
+    /** Per-draw ownership: death and an active kick/native posture outrank the music. */
+    public static boolean isDanceFrame(LivingEntity entity){
+        Frame f=FRAMES.get().peek();
+        if(f==null||f.entity!=entity)return false;
+        if(f.danceEvaluated)return f.dancing;
+        f.danceEvaluated=true;
+        if(!PenguinMeshPreview.isEnabled()||!PenguinRenderSupport.shouldReplace(entity)
+                ||PenguinDeathClient.rendering(entity)
+                ||!com.luochun.kusopenguin.client.music.DiscClient.dancing(entity))return false;
+        PenguinAction action=PenguinPoseClient.action(entity);
+        if(action==PenguinAction.FLYING_KICK){
+            PenguinAnimationClip clip=PenguinMeshModel.animationClip(action);
+            float age=PenguinPoseClient.age(entity,action,f.partial);
+            if(clip!=null&&age>=0&&age<clip.totalDuration())return false;
+        }
+        PenguinPlayerPosture p=posture();
+        return f.dancing=p==null||!p.suppressesSpecialClips();
+    }
+    /** Prone families borrow an upright 2.5-head profile only for the current dance draw. */
+    public static PenguinProportions.Profile profile(EntityModel<?> model){
+        Frame f=FRAMES.get().peek();
+        // Wool and collar passes can supply a second model instance for the same draw.
+        return f!=null&&isDanceFrame(f.entity)
+                ?PenguinProportions.dancingForModel(model):PenguinProportions.forModel(model);
+    }
     /**
      * Single reset/adapt/correct entry point for the shared body. The player posture applies after
      * the adapter so generic mob adapters and the animation rig keep their previous transforms.
@@ -37,6 +63,7 @@ public final class PenguinRenderContext {
         Frame f=FRAMES.get().peek();
         penguin.resetPose();
         if(f==null)return;
+        if(isDanceFrame(f.entity))return; // Procedural rig owns all joints, not the walk adapter.
         // Prone animals own a frame-independent bind pose: no leg/wing walk cycle and no humanoid
         // clip may ever move their limbs while sliding.
         if(PenguinRenderSupport.isProne(f.entity)){
@@ -85,6 +112,11 @@ public final class PenguinRenderContext {
         Frame f=FRAMES.get().peek();if(f==null)return null;
         if(f.evaluated)return f.pose;f.evaluated=true;
         if(shared==null||!PenguinMeshPreview.isEnabled()||!PenguinRenderSupport.shouldReplace(f.entity))return null;
+        if(isDanceFrame(f.entity)){
+            prepareBody(shared);
+            f.pose=PenguinDancePose.evaluate(com.luochun.kusopenguin.client.music.DiscClient.danceElapsed(f.entity,f.partial),shared,f.model,profile(f.model));
+            return f.pose;
+        }
         // The effect-add path may publish TAUNT. Prone animals never evaluate humanoid/action
         // clips; returning null keeps their static slide pose and leaves the server action sets
         // untouched.

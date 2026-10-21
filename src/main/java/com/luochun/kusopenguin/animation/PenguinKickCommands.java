@@ -1,6 +1,7 @@
 package com.luochun.kusopenguin.animation;
 
 import com.luochun.kusopenguin.KusoPenguin;
+import com.luochun.kusopenguin.music.DiscCommands;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
@@ -20,18 +21,22 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 public final class PenguinKickCommands {
     private PenguinKickCommands(){}
     @SubscribeEvent public static void register(RegisterCommandsEvent event){
-        var root=Commands.literal("flyingkick").executes(c->show(c,List.of(c.getSource().getPlayerOrException())));
-        root.then(Commands.literal("get").then(Commands.argument("players",EntityArgument.players())
+        var flyingkick=Commands.literal("flyingkick").requires(s->s.hasPermission(2));
+        flyingkick.executes(c->show(c,List.of(c.getSource().getPlayerOrException())));
+        flyingkick.then(Commands.literal("get").then(Commands.argument("players",EntityArgument.players())
             .executes(c->show(c,EntityArgument.getPlayers(c,"players")))));
-        root.then(Commands.literal("damage").then(Commands.argument("multiplier",DoubleArgumentType.doubleArg(0,PenguinKickSettings.MAX_DAMAGE_MULTIPLIER))
+        flyingkick.then(Commands.literal("damage").then(Commands.argument("multiplier",DoubleArgumentType.doubleArg(0,PenguinKickSettings.MAX_DAMAGE_MULTIPLIER))
             .executes(c->change(c,List.of(c.getSource().getPlayerOrException()),"damage"))
             .then(Commands.argument("players",EntityArgument.players()).executes(c->change(c,EntityArgument.getPlayers(c,"players"),"damage")))));
-        root.then(Commands.literal("knockback").then(Commands.argument("level",IntegerArgumentType.integer(0,PenguinKickSettings.MAX_KNOCKBACK_LEVEL))
+        flyingkick.then(Commands.literal("knockback").then(Commands.argument("level",IntegerArgumentType.integer(0,PenguinKickSettings.MAX_KNOCKBACK_LEVEL))
             .executes(c->change(c,List.of(c.getSource().getPlayerOrException()),"knockback"))
             .then(Commands.argument("players",EntityArgument.players()).executes(c->change(c,EntityArgument.getPlayers(c,"players"),"knockback")))));
-        root.then(Commands.literal("reset").executes(c->change(c,List.of(c.getSource().getPlayerOrException()),"reset"))
+        flyingkick.then(Commands.literal("reset").executes(c->change(c,List.of(c.getSource().getPlayerOrException()),"reset"))
             .then(Commands.argument("players",EntityArgument.players()).executes(c->change(c,EntityArgument.getPlayers(c,"players"),"reset"))));
-        event.getDispatcher().register(Commands.literal("kusopenguin").requires(s->s.hasPermission(2)).then(root));
+        var root=Commands.literal("kusopenguin");
+        root.then(flyingkick);
+        DiscCommands.attach(root);
+        event.getDispatcher().register(root);
     }
     private static int show(CommandContext<CommandSourceStack> c,Collection<ServerPlayer> players){
         var data=PenguinKickSettings.get(c.getSource().getServer());

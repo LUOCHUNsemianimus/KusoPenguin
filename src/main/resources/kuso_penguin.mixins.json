@@ -8,7 +8,9 @@
     "PlayerAttackMixin",
     "MobAttackMixin",
     "PenguinTravelMixin",
-    "PenguinDeathMixin"
+    "PenguinDeathMixin",
+    "JukeboxMusicMixin",
+    "MobDanceMixin"
   ],
   "client": [
     "LivingEntityRendererMixin",

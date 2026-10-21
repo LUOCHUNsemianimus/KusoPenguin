@@ -35,10 +35,11 @@ public final class PenguinBodyLayer<T extends LivingEntity, M extends EntityMode
             return;
         }
         boolean prone = PenguinRenderSupport.isProne(livingEntity);
+        boolean dancing = PenguinRenderContext.isDanceFrame(livingEntity);
         PenguinPoseAdapter adapter = prone ? null : PenguinPoseAdapters.find(this.getParentModel());
         PenguinProportions.Profile profile = prone ? null
-                : PenguinProportions.forModel(this.getParentModel());
-        if (!prone && (adapter == null || profile == null)) {
+                : PenguinRenderContext.profile(this.getParentModel());
+        if (!prone && ((adapter == null && !dancing) || profile == null)) {
             return;
         }
 

@@ -61,6 +61,7 @@ public final class PenguinKick {
         return (float)(amount*settings.damageMultiplier());
     }
     public static boolean tryStart(LivingEntity e){
+        if(e instanceof Mob mob && com.luochun.kusopenguin.music.DanceManager.pausesAI(mob))return false;
         if(!(e.level() instanceof ServerLevel)||!e.isAlive()||!e.hasEffect(ModEffects.PENGUIN)
             ||!PenguinEntitySupport.isSupportedType(e.getType())||!e.onGround()||e.isPassenger()
             ||e.isSwimming()||e.isFallFlying()||e.isSpectator()||e.isBaby()||active(e))return false;

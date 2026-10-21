@@ -1,0 +1,8 @@
+{
+  "sound_event": "kuso_penguin:custom_music",
+  "length_in_seconds": 3600,
+  "comparator_output": 1,
+  "description": {
+    "translate": "item.kuso_penguin.custom_disc"
+  }
+}

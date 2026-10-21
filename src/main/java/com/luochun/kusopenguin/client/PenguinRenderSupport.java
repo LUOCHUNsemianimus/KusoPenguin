@@ -38,7 +38,8 @@ public final class PenguinRenderSupport {
 
     /** True only while this entity is currently drawn as a lowered, sliding penguin body. */
     public static boolean isProne(LivingEntity entity) {
-        return isProneType(entity.getType()) && shouldReplace(entity);
+        return isProneType(entity.getType()) && shouldReplace(entity)
+                && !PenguinRenderContext.isDanceFrame(entity);
     }
 
     public static boolean shouldReplace(LivingEntity entity) {
