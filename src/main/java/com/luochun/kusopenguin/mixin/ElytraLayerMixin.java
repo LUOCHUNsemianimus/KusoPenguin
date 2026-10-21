@@ -21,7 +21,11 @@ public abstract class ElytraLayerMixin {
                                         int packedLight, LivingEntity entity, float limbSwing,
                                         float limbSwingAmount, float partialTick, float ageInTicks,
                                         float netHeadYaw, float headPitch, CallbackInfo callback) {
-        if (PenguinRenderSupport.shouldReplace(entity)) {
+        // A replaced player that is actually gliding is re-mounted by LivingEntityRendererMixin
+        // and must keep the native layer. Everything else replaced (including detached death
+        // copies and non-gliding states) keeps the previous hidden-Elytra policy.
+        if (PenguinRenderSupport.shouldReplace(entity)
+                && !PenguinRenderSupport.shouldMountElytraOnBack(entity)) {
             callback.cancel();
         }
     }

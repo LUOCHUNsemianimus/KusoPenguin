@@ -13,8 +13,11 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.layers.CustomHeadLayer;
 import net.minecraft.client.renderer.entity.layers.Deadmau5EarsLayer;
+import net.minecraft.client.renderer.entity.layers.ElytraLayer;
 import net.minecraft.client.renderer.entity.layers.HumanoidArmorLayer;
 import net.minecraft.client.renderer.entity.layers.RenderLayer;
+import net.minecraft.client.renderer.entity.layers.SaddleLayer;
+import net.minecraft.client.renderer.entity.layers.WolfArmorLayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import org.spongepowered.asm.mixin.Mixin;
@@ -78,6 +81,30 @@ public abstract class LivingEntityRendererMixin {
                                              LivingEntity entity, float entityYaw,
                                              float renderPartialTick, PoseStack originalPoseStack,
                                              MultiBufferSource originalBuffer, int originalLight) {
+        // Body-only overlays are incompatible with the horizontal body. Suppress them only while
+        // the prone replacement is active; effect removal restores the complete vanilla layers.
+        if (PenguinRenderSupport.isProne(entity)
+                && (layer instanceof SaddleLayer<?, ?> || layer instanceof WolfArmorLayer)) {
+            return;
+        }
+        if (layer instanceof ElytraLayer<?, ?>) {
+            // Keep the native ElytraLayer (equipment check, textures/cape overrides, glint and
+            // wing animation) but re-anchor its pose on the penguin back for a replaced gliding
+            // player. For every other draw the helper returns false and the original path below
+            // stays in charge, including the hidden-Elytra policy for non-gliding replacements.
+            poseStack.pushPose();
+            boolean mounted = PenguinRenderContext.mountElytraOnBack(poseStack);
+            if (mounted) {
+                try {
+                    layer.render(poseStack, buffer, packedLight, layerEntity, limbSwing,
+                            limbSwingAmount, partialTick, ageInTicks, netHeadYaw, headPitch);
+                } finally {
+                    poseStack.popPose();
+                }
+                return;
+            }
+            poseStack.popPose();
+        }
         PenguinProportions.Profile profile = PenguinRenderSupport.shouldReplace(entity)
                 && isOffsetHeadLayer(layer)
                 ? PenguinProportions.forModel(this.getModel())

@@ -13,6 +13,10 @@ import net.minecraft.world.entity.LivingEntity;
 /**
  * Draws the five-part penguin body after the vanilla head-only main pass. A single shared model
  * instance is reset on every draw so one entity cannot leak poses into the next.
+ *
+ * <p>Upright families keep their adapter/profile transform. The seven prone animals use one
+ * whole-assembly transform from {@link PenguinPronePose}: translating and rotating only the torso
+ * would leave wings and feet standing through the ground.
  */
 public final class PenguinBodyLayer<T extends LivingEntity, M extends EntityModel<T>>
         extends RenderLayer<T, M> {
@@ -30,9 +34,11 @@ public final class PenguinBodyLayer<T extends LivingEntity, M extends EntityMode
         if (!PenguinRenderSupport.shouldReplace(livingEntity)) {
             return;
         }
-        PenguinPoseAdapter adapter = PenguinPoseAdapters.find(this.getParentModel());
-        PenguinProportions.Profile profile = PenguinProportions.forModel(this.getParentModel());
-        if (adapter == null || profile == null) {
+        boolean prone = PenguinRenderSupport.isProne(livingEntity);
+        PenguinPoseAdapter adapter = prone ? null : PenguinPoseAdapters.find(this.getParentModel());
+        PenguinProportions.Profile profile = prone ? null
+                : PenguinProportions.forModel(this.getParentModel());
+        if (!prone && (adapter == null || profile == null)) {
             return;
         }
 
@@ -43,12 +49,19 @@ public final class PenguinBodyLayer<T extends LivingEntity, M extends EntityMode
         VertexConsumer vertexConsumer = buffer.getBuffer(RenderType.entityCutoutNoCull(
                 mesh != null ? PenguinMeshModel.TEXTURE : PenguinBodyModel.TEXTURE));
         int packedOverlay = LivingEntityRenderer.getOverlayCoords(livingEntity, 0.0F);
-        // Each family has an explicit neck and floor anchor; head shift and body offset
-        // differ when the native head is not attached at model Y=0.
         poseStack.pushPose();
         try {
-            poseStack.translate(0.0F, profile.bodyOffsetBlocks(), 0.0F);
-            poseStack.scale(profile.bodyScale(), profile.bodyScale(), profile.bodyScale());
+            if (prone) {
+                // Single transform for all five roots: offset from the measured floor bound,
+                // family scale, then the +90 degree X lay-down rotation.
+                PenguinPronePose.applyBodyTransform(poseStack, this.penguin,
+                        this.getParentModel(), mesh);
+            } else {
+                // Each family has an explicit neck and floor anchor; head shift and body offset
+                // differ when the native head is not attached at model Y=0.
+                poseStack.translate(0.0F, profile.bodyOffsetBlocks(), 0.0F);
+                poseStack.scale(profile.bodyScale(), profile.bodyScale(), profile.bodyScale());
+            }
             PenguinAnimationPose animated=PenguinRenderContext.pose();
             if(mesh!=null&&animated!=null){
                 PenguinMeshModel.currentSkin().render(poseStack,vertexConsumer,packedLight,packedOverlay,-1,animated);

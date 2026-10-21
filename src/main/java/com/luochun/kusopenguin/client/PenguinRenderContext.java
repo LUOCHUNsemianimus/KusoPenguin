@@ -11,6 +11,7 @@ import net.minecraft.world.entity.LivingEntity;
 public final class PenguinRenderContext {
     private static final ThreadLocal<ArrayDeque<Frame>> FRAMES=ThreadLocal.withInitial(ArrayDeque::new);
     private static PenguinBodyModel shared;
+    private static final float PIXELS_PER_BLOCK=16.0F;
     private static final class Frame {
         final LivingEntity entity;final EntityModel<?> model;final float partial;
         boolean evaluated;PenguinAnimationPose pose;
@@ -36,16 +37,58 @@ public final class PenguinRenderContext {
         Frame f=FRAMES.get().peek();
         penguin.resetPose();
         if(f==null)return;
+        // Prone animals own a frame-independent bind pose: no leg/wing walk cycle and no humanoid
+        // clip may ever move their limbs while sliding.
+        if(PenguinRenderSupport.isProne(f.entity)){
+            PenguinPronePose.applyStatic(penguin);
+            return;
+        }
         PenguinPoseAdapter adapter=PenguinPoseAdapters.find(f.model);
         if(adapter==null)return;
         adapter.apply(penguin,f.model,f.entity);
         PenguinPlayerPosture posture=posture();
         if(posture!=null)posture.applyCorrections(penguin,f.model);
     }
+    /**
+     * Additional translation from the penguin body origin to the rounded upper back, in penguin
+     * model pixels. Vanilla {@code ElytraLayer} then adds its own +0.125 blocks in this same
+     * scaled frame; at the humanoid bodyScale of .5 that is two more penguin pixels, so the final
+     * pivot is about four pixels behind the body centre. Keeping our own constant separate avoids
+     * applying that native offset twice.
+     */
+    private static final float ELYTRA_PIVOT_BACK_PIXELS=2.0F;
+    /**
+     * Re-mounts the still-native Elytra layer on the shared penguin body frame for a replaced,
+     * actually gliding player. The caller owns push/finally-pop; this method only appends the
+     * mount transform and returns true. It returns false without touching the stack for every
+     * other draw, so vanilla, death-copy and non-gliding hidden-Elytra paths keep their policy.
+     *
+     * <p>Transform order matches {@code PenguinBodyLayer}: profile body offset, body scale, the
+     * prepared {@code body} ModelPart frame, then the named back offset. It adds no global
+     * rotation and no second Elytra render: {@code PlayerRenderer.setupRotations} still owns the
+     * fall-flying pitch/yaw/roll, and vanilla {@code ElytraLayer} still owns equipment
+     * eligibility, texture/cape/custom-Elytra selection, glint and wing animation.
+     */
+    public static boolean mountElytraOnBack(PoseStack poseStack){
+        Frame f=FRAMES.get().peek();
+        if(f==null||shared==null||!PenguinRenderSupport.shouldMountElytraOnBack(f.entity))return false;
+        PenguinProportions.Profile profile=PenguinProportions.forModel(f.model);
+        if(profile==null)return false;
+        prepareBody(shared);
+        poseStack.translate(0.0F,profile.bodyOffsetBlocks(),0.0F);
+        poseStack.scale(profile.bodyScale(),profile.bodyScale(),profile.bodyScale());
+        shared.body().translateAndRotate(poseStack);
+        poseStack.translate(0.0F,0.0F,ELYTRA_PIVOT_BACK_PIXELS/PIXELS_PER_BLOCK);
+        return true;
+    }
     public static PenguinAnimationPose pose(){
         Frame f=FRAMES.get().peek();if(f==null)return null;
         if(f.evaluated)return f.pose;f.evaluated=true;
         if(shared==null||!PenguinMeshPreview.isEnabled()||!PenguinRenderSupport.shouldReplace(f.entity))return null;
+        // The effect-add path may publish TAUNT. Prone animals never evaluate humanoid/action
+        // clips; returning null keeps their static slide pose and leaves the server action sets
+        // untouched.
+        if(PenguinRenderSupport.isProne(f.entity))return null;
         PenguinAction action=PenguinDeathClient.rendering(f.entity)?PenguinAction.DEATH:PenguinPoseClient.action(f.entity);if(action==null)return null;
         PenguinPlayerPosture posture=posture();
         // A non-standing posture uses the native player animation; ordinary taunt/kick clips must
@@ -60,6 +103,18 @@ public final class PenguinRenderContext {
         f.pose=PenguinAnimationPose.evaluate(action,clip,sample,shared,f.model);return f.pose;
     }
     public static void applyHead(PoseStack stack){
+        Frame f=FRAMES.get().peek();
+        if(f!=null&&PenguinRenderSupport.isProne(f.entity)){
+            if(shared!=null){
+                // The head is anchored to the same prepared static body and mesh-tier floor bound
+                // that the body layer draws, so both use one neck origin equation.
+                prepareBody(shared);
+                PenguinMeshModel mesh=PenguinMeshPreview.isEnabled()
+                        ? PenguinMeshModel.current() : null;
+                PenguinPronePose.applyHead(stack,f.model,shared,mesh);
+            }
+            return;
+        }
         PenguinAnimationPose p=pose();
         if(p!=null){stack.mulPose(p.headDelta);return;}
         PenguinPlayerPosture posture=posture();

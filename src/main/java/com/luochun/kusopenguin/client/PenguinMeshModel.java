@@ -159,6 +159,42 @@ public final class PenguinMeshModel {
         point.set(vertex.x()/PIXEL,vertex.y()/PIXEL,vertex.z()/PIXEL);matrix.transformPosition(point);return point.y;
     }
 
+    /**
+     * Largest {@code -Z} extent of all five static roots in model blocks. The prone lay-down
+     * rotation maps local Z onto renderer Y, so this is the floor bound used by
+     * {@link PenguinPronePose}. The result is immutable per loaded tier and is cached there.
+     */
+    float maxNegZ(PenguinBodyModel parts) {
+        float max = Float.NEGATIVE_INFINITY;
+        max = Math.max(max, maxNegZ(parts.body(), this.body));
+        max = Math.max(max, maxNegZ(parts.rightWing(), this.rightWing));
+        max = Math.max(max, maxNegZ(parts.leftWing(), this.leftWing));
+        max = Math.max(max, maxNegZ(parts.rightFoot(), this.rightFoot));
+        max = Math.max(max, maxNegZ(parts.leftFoot(), this.leftFoot));
+        return max;
+    }
+
+    private static float maxNegZ(ModelPart modelPart, Part meshPart) {
+        PoseStack stack = new PoseStack();
+        modelPart.translateAndRotate(stack);
+        org.joml.Matrix4f matrix = new org.joml.Matrix4f(stack.last().pose());
+        org.joml.Vector3f point = new org.joml.Vector3f();
+        float max = Float.NEGATIVE_INFINITY;
+        for (Triangle triangle : meshPart.triangles()) {
+            max = Math.max(max, negZ(triangle.a(), matrix, point));
+            max = Math.max(max, negZ(triangle.b(), matrix, point));
+            max = Math.max(max, negZ(triangle.c(), matrix, point));
+        }
+        return max;
+    }
+
+    private static float negZ(Vertex vertex, org.joml.Matrix4fc matrix,
+                              org.joml.Vector3f point) {
+        point.set(vertex.x() / PIXEL, vertex.y() / PIXEL, vertex.z() / PIXEL);
+        matrix.transformPosition(point);
+        return -point.z;
+    }
+
     private static void renderPart(PoseStack poseStack, VertexConsumer buffer, int packedLight,
                                    int packedOverlay, int color, ModelPart modelPart,
                                    Part meshPart) {

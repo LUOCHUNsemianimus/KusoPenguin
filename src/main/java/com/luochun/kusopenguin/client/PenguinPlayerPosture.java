@@ -18,10 +18,11 @@ import org.joml.Vector3f;
  * single head-follow frame used by the head, hat/armor layers and the body layer.
  *
  * <p>Only existing native states are fitted: {@code isCrouching}, the model riding flag,
- * {@code Pose.SITTING} and {@code swimAmount}. No movement, collision or input is changed.
+ * {@code Pose.SITTING}, {@code swimAmount} and fall-flying (Elytra). No movement, collision or
+ * input is changed.
  */
 final class PenguinPlayerPosture {
-    enum Kind { NONE, CROUCHING, SITTING, SWIMMING }
+    enum Kind { NONE, CROUCHING, SITTING, SWIMMING, GLIDING }
 
     private static final float RIDING_LEG_X_ROT = -1.4137167F;
     private static final float RIDING_LEG_Y_ROT = (float) (Math.PI / 10.0);
@@ -56,6 +57,8 @@ final class PenguinPlayerPosture {
         PenguinPlayerPosture posture=new PenguinPlayerPosture(kind,head);
         PenguinMeshModel mesh=PenguinMeshModel.current();
         if(kind==Kind.CROUCHING && mesh!=null) {
+            // Crouch is the only posture with this ground fit. Gliding is airborne and keeps the
+            // adapted native translations/rotations without measuring a floor.
             // The external PlayerRenderer crouch offset is -2/16 world blocks; its model scale
             // is .9375. Correct that once in model-root space, together with actual torso/feet bounds.
             penguin.resetPose();PenguinPoseAdapters.find(model).apply(penguin,model,entity);
@@ -77,6 +80,12 @@ final class PenguinPlayerPosture {
     }
 
     private static Kind classify(LivingEntity entity, HumanoidModel<?> model) {
+        // Fall-flying owns the whole native pose: PlayerRenderer.setupRotations adds the global
+        // pitch/yaw/roll and HumanoidModel.setupAnim supplies the head, arm, leg and use-item
+        // rotations. Classify it first so no crouch/swim fit or standing clip can override it.
+        if (entity.isFallFlying()) {
+            return Kind.GLIDING;
+        }
         if (model.riding) {
             return Kind.SITTING;
         }

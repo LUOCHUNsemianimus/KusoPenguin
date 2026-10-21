@@ -46,6 +46,16 @@ public final class PenguinClientEvents {
         addLayer(event.getRenderer(EntityType.IRON_GOLEM), penguin);
         addLayer(event.getRenderer(EntityType.WARDEN), penguin);
 
+        // Prone adults: same shared body layer, static horizontal pose. Cave spider keeps its
+        // native renderer .7 overall scale because only the inner body transform is ours.
+        addLayer(event.getRenderer(EntityType.COW), penguin);
+        addLayer(event.getRenderer(EntityType.SHEEP), penguin);
+        addLayer(event.getRenderer(EntityType.PIG), penguin);
+        addLayer(event.getRenderer(EntityType.CAT), penguin);
+        addLayer(event.getRenderer(EntityType.WOLF), penguin);
+        addLayer(event.getRenderer(EntityType.SPIDER), penguin);
+        addLayer(event.getRenderer(EntityType.CAVE_SPIDER), penguin);
+
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
