@@ -37,8 +37,9 @@ public final class PenguinRenderContext {
         if(f.danceEvaluated)return f.dancing;
         f.danceEvaluated=true;
         if(!PenguinMeshPreview.isEnabled()||!PenguinRenderSupport.shouldReplace(entity)
-                ||PenguinDeathClient.rendering(entity)
-                ||!com.luochun.kusopenguin.client.music.DiscClient.dancing(entity))return false;
+                ||PenguinDeathClient.rendering(entity))return false;
+        boolean revival=com.luochun.kusopenguin.client.revival.RevivalClientState.pole(entity);
+        if(!revival&&!com.luochun.kusopenguin.client.music.DiscClient.dancing(entity))return false;
         PenguinAction action=PenguinPoseClient.action(entity);
         if(action==PenguinAction.FLYING_KICK){
             PenguinAnimationClip clip=PenguinMeshModel.animationClip(action);
@@ -114,7 +115,11 @@ public final class PenguinRenderContext {
         if(shared==null||!PenguinMeshPreview.isEnabled()||!PenguinRenderSupport.shouldReplace(f.entity))return null;
         if(isDanceFrame(f.entity)){
             prepareBody(shared);
-            f.pose=PenguinDancePose.evaluate(com.luochun.kusopenguin.client.music.DiscClient.danceElapsed(f.entity,f.partial),shared,f.model,profile(f.model));
+            f.pose=com.luochun.kusopenguin.client.revival.RevivalClientState.pole(f.entity)
+                    ?PenguinDancePose.evaluatePole(
+                            com.luochun.kusopenguin.client.revival.RevivalClientState.elapsed(f.entity,f.partial),
+                            shared,f.model,profile(f.model))
+                    :PenguinDancePose.evaluate(com.luochun.kusopenguin.client.music.DiscClient.danceElapsed(f.entity,f.partial),shared,f.model,profile(f.model));
             return f.pose;
         }
         // The effect-add path may publish TAUNT. Prone animals never evaluate humanoid/action

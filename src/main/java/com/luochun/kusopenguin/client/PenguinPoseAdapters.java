@@ -1,5 +1,6 @@
 package com.luochun.kusopenguin.client;
 
+import com.luochun.kusopenguin.client.compat.MaidCompatClient;
 import net.minecraft.client.model.CreeperModel;
 import net.minecraft.client.model.IronGolemModel;
 import net.minecraft.client.model.WardenModel;
@@ -30,6 +31,12 @@ public final class PenguinPoseAdapters {
         }
         if (original instanceof HumanoidModel<?>) {
             return PenguinPoseAdapters::applyHumanoid;
+        }
+        // Optional maid Bedrock models: guarded facade returns null when the API is absent or
+        // a required standard bone/head is missing, keeping the complete native renderer.
+        PenguinPoseAdapter maid = MaidCompatClient.adapter(original);
+        if (maid != null) {
+            return maid;
         }
         return null;
     }

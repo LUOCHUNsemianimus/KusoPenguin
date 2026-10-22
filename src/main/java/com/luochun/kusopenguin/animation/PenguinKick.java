@@ -61,6 +61,9 @@ public final class PenguinKick {
         return (float)(amount*settings.damageMultiplier());
     }
     public static boolean tryStart(LivingEntity e){
+        // Maid is eligible for the shared body/taunt/dance/death pose, but must never gain the
+        // hostile auto-kick behaviour or be launched at her owner/target by this path.
+        if(PenguinEntitySupport.isMaid(e.getType()))return false;
         if(e instanceof Mob mob && com.luochun.kusopenguin.music.DanceManager.pausesAI(mob))return false;
         if(!(e.level() instanceof ServerLevel)||!e.isAlive()||!e.hasEffect(ModEffects.PENGUIN)
             ||!PenguinEntitySupport.isSupportedType(e.getType())||!e.onGround()||e.isPassenger()

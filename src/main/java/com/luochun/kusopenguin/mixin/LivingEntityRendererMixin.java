@@ -4,6 +4,7 @@ import com.luochun.kusopenguin.client.PenguinHeadRenderer;
 import com.luochun.kusopenguin.client.PenguinProportions;
 import com.luochun.kusopenguin.client.PenguinRenderSupport;
 import com.luochun.kusopenguin.client.PenguinRenderContext;
+import com.luochun.kusopenguin.client.compat.MaidCompatClient;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -86,6 +87,31 @@ public abstract class LivingEntityRendererMixin {
         if ((PenguinRenderSupport.isProne(entity) || PenguinRenderContext.isDanceFrame(entity))
                 && (layer instanceof SaddleLayer<?, ?> || layer instanceof WolfArmorLayer)) {
             return;
+        }
+        // Optional maid layers. Only a ready Bedrock standard-bone model reaches this branch, so a
+        // Gecko/YSM/missing-bone maid keeps every native layer and the complete native model.
+        if (PenguinRenderSupport.isMaidReplacement(entity, this.getModel())) {
+            if (MaidCompatClient.isBodyDecorationLayer(layer)) {
+                // Backpack/back item/banner are authored for the native body and would float on
+                // the penguin body.
+                return;
+            }
+            PenguinProportions.Profile maidProfile = PenguinProportions.forModel(this.getModel());
+            if (maidProfile != null && MaidCompatClient.isHeadLayer(layer)) {
+                // The layer adds TLM's local head transform; provide the same ancestor chain and
+                // head anchor as the main head-only render, without applying the local head twice.
+                poseStack.pushPose();
+                try {
+                    PenguinRenderContext.applyHead(poseStack);
+                    poseStack.translate(0.0F, maidProfile.headDropBlocks(), 0.0F);
+                    MaidCompatClient.applyHeadAncestors(this.getModel(), poseStack);
+                    layer.render(poseStack, buffer, packedLight, layerEntity, limbSwing,
+                            limbSwingAmount, partialTick, ageInTicks, netHeadYaw, headPitch);
+                } finally {
+                    poseStack.popPose();
+                }
+                return;
+            }
         }
         if (layer instanceof ElytraLayer<?, ?>) {
             // Keep the native ElytraLayer (equipment check, textures/cape overrides, glint and

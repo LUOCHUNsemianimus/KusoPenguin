@@ -48,18 +48,42 @@ public final class PenguinDancePose {
     public static PenguinAnimationPose evaluate(double elapsedSeconds, PenguinBodyModel parts,
                                                  EntityModel<?> original,
                                                  PenguinProportions.Profile profile) {
+        return evaluateInternal(elapsedSeconds, parts, original, profile, false);
+    }
+
+    /** Revival channel: forced pole style with one continuous motion clock for the full 8 s. */
+    public static PenguinAnimationPose evaluatePole(double elapsedSeconds, PenguinBodyModel parts,
+                                                     EntityModel<?> original) {
+        PenguinProportions.Profile profile = PenguinProportions.forModel(original);
+        return profile == null ? null
+                : evaluatePole(elapsedSeconds, parts, original, profile);
+    }
+
+    public static PenguinAnimationPose evaluatePole(double elapsedSeconds, PenguinBodyModel parts,
+                                                     EntityModel<?> original,
+                                                     PenguinProportions.Profile profile) {
+        return evaluateInternal(elapsedSeconds, parts, original, profile, true);
+    }
+
+    private static PenguinAnimationPose evaluateInternal(double elapsedSeconds,
+                                                          PenguinBodyModel parts,
+                                                          EntityModel<?> original,
+                                                          PenguinProportions.Profile profile,
+                                                          boolean pole) {
         if (!Double.isFinite(elapsedSeconds)) throw new IllegalArgumentException("Non-finite dance clock");
         PenguinAnimationClip bind = PenguinMeshModel.animationClip();
         if (bind == null) return null; // The resource cache has not loaded yet.
         // Quantize only pose sampling; never throttle rendering, music, entity ticks or input.
         double sampledSeconds = Math.floor(elapsedSeconds * DANCE_FPS) / DANCE_FPS;
-        // Style cadence remains real wall/game time: five seconds per style.
-        int dance = danceIndex(sampledSeconds);
+        // Disc styles keep their real five-second cadence. The revival channel stays on pole
+        // (style 1) and uses the continuous elapsed clock, so it never switches at five seconds.
+        int dance = pole ? 1 : danceIndex(sampledSeconds);
         // Separate motion clock: the authored 0.5 s hip/wave cycle becomes 1/3 s and the
-        // 1 s pole cycle becomes 2/3 s, while the style still changes every five real seconds.
+        // 1 s pole cycle becomes 2/3 s, while disc styles change every five real seconds.
         // Subtract the real style counter, not danceIndex (0..2): modulo 5 makes every style
         // start at phase zero again, instead of accumulating 15 s of phase across style wraps.
-        double styleElapsed = sampledSeconds - Math.floor(sampledSeconds / 5.0) * 5.0;
+        double styleElapsed = pole ? sampledSeconds
+                : sampledSeconds - Math.floor(sampledSeconds / 5.0) * 5.0;
         float motionSeconds = (float) (styleElapsed * MOTION_SPEED);
         float cycle = TAU * motionSeconds * (dance == 1 ? 1.0F : 2.0F);
         // Standard sine/cosine values reach the authored angles at 30 FPS without old 5 FPS

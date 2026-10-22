@@ -10,7 +10,8 @@
     "PenguinTravelMixin",
     "PenguinDeathMixin",
     "JukeboxMusicMixin",
-    "MobDanceMixin"
+    "MobDanceMixin",
+    "ServerPlayerRevivalMixin"
   ],
   "client": [
     "LivingEntityRendererMixin",
@@ -19,6 +20,7 @@
     "AgeableListModelAccessor",
     "HumanoidArmorLayerMixin",
     "ItemInHandLayerMixin",
+    "MaidHeldItemLayerMixin",
     "CapeLayerMixin",
     "ElytraLayerMixin",
     "ParrotOnShoulderLayerMixin",

@@ -1,5 +1,6 @@
 package com.luochun.kusopenguin.client;
 
+import com.luochun.kusopenguin.client.compat.MaidCompatClient;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.luochun.kusopenguin.mixin.AgeableListModelAccessor;
@@ -59,6 +60,11 @@ public final class PenguinHeadRenderer {
         if(profile==null)return new Matrix4f();
         PoseStack stack=new PoseStack();
         stack.translate(0,profile.headDropBlocks(),0);
+        if(MaidCompatClient.isMaidModel(model)){
+            // Bedrock head bones need the full ancestor chain, unlike a vanilla HumanoidModel head.
+            Matrix4f maid=MaidCompatClient.headMatrix(model,profile.headDropBlocks());
+            return maid!=null?maid:new Matrix4f();
+        }
         if(model instanceof WardenModel<?> warden){
             ModelPart root=warden.root(),bone=root.getChild("bone"),body=bone.getChild("body");
             root.translateAndRotate(stack);bone.translateAndRotate(stack);body.translateAndRotate(stack);
@@ -76,6 +82,12 @@ public final class PenguinHeadRenderer {
     static float maxY(EntityModel<?> model,Matrix4f delta){
         PenguinProportions.Profile profile=PenguinRenderContext.profile(model);
         if(profile==null)throw new IllegalArgumentException("Unsupported death head");
+        if(MaidCompatClient.isMaidModel(model)){
+            // Collected from the actual BedrockPart vertices, including sibling hat/hair roots.
+            float maid=MaidCompatClient.headMaxY(model,delta,profile.headDropBlocks());
+            if(!Float.isNaN(maid))return maid;
+            throw new IllegalArgumentException("Unsupported maid head bounds");
+        }
         PoseStack stack=new PoseStack();stack.mulPose(delta);
         stack.translate(0,profile.headDropBlocks(),0);
         ModelPart head;
@@ -124,6 +136,17 @@ public final class PenguinHeadRenderer {
         }
         // The head keeps its size and only moves down onto the scaled body. Villager profession
         // hats reach this helper through RenderLayerMixin, so they get the same single shift.
+        if (MaidCompatClient.isMaidModel(model)) {
+            poseStack.pushPose();
+            try {
+                PenguinRenderContext.applyHead(poseStack);
+                poseStack.translate(0.0F, profile.headDropBlocks(), 0.0F);
+                return MaidCompatClient.renderHeadSubtree(model, poseStack, buffer, packedLight,
+                        packedOverlay, color);
+            } finally {
+                poseStack.popPose();
+            }
+        }
         poseStack.pushPose();
         try {
             PenguinRenderContext.applyHead(poseStack);

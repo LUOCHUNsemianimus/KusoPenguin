@@ -20,6 +20,17 @@ repositories {
         }
         filter { includeModule('javazoom', 'jlayer') }
     }
+    // Optional Touhou Little Maid integration. Only this module is routed to Modrinth;
+    // the JLayer repository above and the rest of the dependency graph stay untouched.
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'KusoMaidResolution'
+                url = uri('https://api.modrinth.com/maven')
+            }
+        }
+        filter { includeGroup('maven.modrinth') }
+    }
 }
 sourceSets.main.resources { exclude '**/*.bbmodel' }
 
@@ -48,6 +59,15 @@ dependencies {
         }
     }
     additionalRuntimeClasspath "javazoom:jlayer:1.0.1"
+
+    // Compile against the optional maid API only. It is not jarJar'd, is not listed as a
+    // dependency in neoforge.mods.toml, and is loaded only when the mod is actually present.
+    compileOnly "maven.modrinth:R0bDWFAW:1.5.3-neoforge+mc1.21.1"
+    if (project.hasProperty('withMaid') && project.property('withMaid').toString() == 'true') {
+        // runtimeOnly puts the artifact on the dev runtime mod classpath so NeoForge discovers
+        // it as a mod; additionalRuntimeClasspath alone only supplied library classes.
+        runtimeOnly "maven.modrinth:R0bDWFAW:1.5.3-neoforge+mc1.21.1"
+    }
 }
 
 tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }

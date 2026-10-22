@@ -1,6 +1,8 @@
 package com.luochun.kusopenguin.animation;
 
 import java.util.Set;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 
 /**
@@ -9,8 +11,13 @@ import net.minecraft.world.entity.EntityType;
  * <p>{@link #isSupportedType} deliberately keeps its original meaning: the upright, action-capable
  * set used by server kick/taunt/death eligibility. Prone replacements are a separate render-only
  * set, so enabling their rendering can never start the humanoid action clips on a cow or spider.
+ *
+ * <p>The optional maid type is matched by registry id only. This predicate never loads a maid
+ * class, so it is safe on a standalone game and on a dedicated server.
  */
 public final class PenguinEntitySupport {
+    private static final ResourceLocation MAID_ID =
+            ResourceLocation.fromNamespaceAndPath("touhou_little_maid", "maid");
     private static final Set<EntityType<?>> SUPPORTED_TYPES = Set.of(
             EntityType.PLAYER,
             EntityType.SKELETON,
@@ -31,9 +38,14 @@ public final class PenguinEntitySupport {
     private PenguinEntitySupport() {
     }
 
-    /** Upright action-capable contract; unchanged so server eligibility stays byte-for-byte. */
+    /** Upright action-capable contract plus the optional maid action/pose eligibility. */
     public static boolean isSupportedType(EntityType<?> type) {
-        return SUPPORTED_TYPES.contains(type);
+        return SUPPORTED_TYPES.contains(type) || isMaid(type);
+    }
+
+    /** Exact optional maid registry id, resolved without touching a maid API class. */
+    public static boolean isMaid(EntityType<?> type) {
+        return type != null && MAID_ID.equals(BuiltInRegistries.ENTITY_TYPE.getKey(type));
     }
 
     /** Render-only prone contract. These types are intentionally absent from the set above. */

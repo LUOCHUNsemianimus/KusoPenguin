@@ -1,7 +1,9 @@
 package com.luochun.kusopenguin.client;
 
 import com.luochun.kusopenguin.animation.PenguinEntitySupport;
+import com.luochun.kusopenguin.client.compat.MaidCompatClient;
 import com.luochun.kusopenguin.registry.ModEffects;
+import net.minecraft.client.model.EntityModel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Pose;
@@ -46,8 +48,7 @@ public final class PenguinRenderSupport {
         if(PenguinDeathClient.rendering(entity))return true;
         if (!isSupportedType(entity.getType())) {
             return false;
-        }
-        if (entity.isBaby()
+        }        if (entity.isBaby()
                 || entity.isInvisible()
                 || entity.isCurrentlyGlowing()
                 || entity.isSpectator()) {
@@ -78,6 +79,17 @@ public final class PenguinRenderSupport {
             }
         }
         return entity.hasEffect(ModEffects.PENGUIN);
+    }
+
+    /**
+     * Model-aware maid gate used before suppressing/re-anchoring native maid layers. Unlike the
+     * entity-only gate this also requires the Bedrock standard-bone contract, so a missing head or
+     * limb keeps the complete native maid instead of a penguin body without a native head.
+     */
+    public static boolean isMaidReplacement(LivingEntity entity, EntityModel<?> model) {
+        return MaidCompatClient.isMaidModel(model)
+                && MaidCompatClient.isReady(model)
+                && shouldReplace(entity);
     }
 
     /**

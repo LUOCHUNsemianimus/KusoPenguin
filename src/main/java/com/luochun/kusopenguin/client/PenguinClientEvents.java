@@ -5,6 +5,8 @@ import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.player.PlayerRenderer;
 import net.minecraft.client.resources.PlayerSkin;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -56,6 +58,12 @@ public final class PenguinClientEvents {
         addLayer(event.getRenderer(EntityType.SPIDER), penguin);
         addLayer(event.getRenderer(EntityType.CAVE_SPIDER), penguin);
 
+        // Optional maid renderer. Use the optional registry lookup: the defaulted get() returns
+        // PIG for a missing id and would attach a duplicate penguin layer to the standalone pig.
+        // No maid class is referenced from this client event.
+        BuiltInRegistries.ENTITY_TYPE.getOptional(
+                        ResourceLocation.fromNamespaceAndPath("touhou_little_maid", "maid"))
+                .ifPresent(maid -> addLayer(event.getRenderer(maid), penguin));
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
