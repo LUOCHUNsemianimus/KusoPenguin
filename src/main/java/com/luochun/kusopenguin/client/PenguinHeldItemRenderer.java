@@ -32,19 +32,18 @@ public final class PenguinHeldItemRenderer {
     private PenguinHeldItemRenderer() {
     }
 
+    /** True wing-end position in canonical model blocks and the wing rotation, no vanilla tail. */
+    private record Grip(Vector3f handPixels, Quaternionf rotation) {
+    }
+
     static Vector3f visibleTipOffset(boolean positiveWing) {
         Vector3f offset=new Vector3f(ACTIVE_TIP_OFFSET);
         if(!positiveWing)offset.x=-offset.x;
         return offset;
     }
 
-    /**
-     * Appends the current wing-end frame to the layer's pose stack. The vanilla trailing
-     * XP(-90)/YP(180)/translate sequence stays untouched; its fixed translation is pre-subtracted
-     * here so the item origin lands on the wing end instead of the old humanoid hand.
-     */
-    static void apply(PoseStack poseStack, PenguinProportions.Profile profile,
-                      PenguinAnimationPose pose, PenguinBodyModel penguin, HumanoidArm arm) {
+    private static Grip grip(PenguinProportions.Profile profile, PenguinAnimationPose pose,
+                             PenguinBodyModel penguin, HumanoidArm arm) {
         boolean left = arm == HumanoidArm.LEFT;
         // Legacy left_wing is on anatomical right (negative Java-model X).
         boolean negativeWing = !left;
@@ -61,9 +60,38 @@ public final class PenguinHeldItemRenderer {
         if (negativeWing) {
             localOffset.x = -localOffset.x;
         }
+        return new Grip(wingFrame.transformPosition(localOffset),
+                wingFrame.getUnnormalizedRotation(new Quaternionf()).normalize());
+    }
 
-        Vector3f handPixels = wingFrame.transformPosition(localOffset);
-        Quaternionf wingRotation = wingFrame.getUnnormalizedRotation(new Quaternionf()).normalize();
+    /**
+     * Shared true-grip extraction for the native Gecko NPC bridge: position in canonical model
+     * blocks and wing rotation only. It deliberately does NOT pre-subtract vanilla's hand tail,
+     * because a native bone locator replaces the whole item frame rather than a vanilla redirect.
+     * The existing player/maid {@link #apply} path keeps its exact residual-subtraction semantics.
+     */
+    public static Matrix4f gripMatrix(PenguinProportions.Profile profile,
+                                      PenguinAnimationPose pose, PenguinBodyModel penguin,
+                                      HumanoidArm arm) {
+        Grip grip = grip(profile, pose, penguin, arm);
+        float scale = profile.bodyScale() / PIXELS_PER_BLOCK;
+        return new Matrix4f().translation(grip.handPixels().x * scale,
+                        grip.handPixels().y * scale + profile.bodyOffsetBlocks(),
+                        grip.handPixels().z * scale)
+                .rotate(grip.rotation());
+    }
+
+    /**
+     * Appends the current wing-end frame to the layer's pose stack. The vanilla trailing
+     * XP(-90)/YP(180)/translate sequence stays untouched; its fixed translation is pre-subtracted
+     * here so the item origin lands on the wing end instead of the old humanoid hand.
+     */
+    static void apply(PoseStack poseStack, PenguinProportions.Profile profile,
+                      PenguinAnimationPose pose, PenguinBodyModel penguin, HumanoidArm arm) {
+        boolean left = arm == HumanoidArm.LEFT;
+        Grip grip = grip(profile, pose, penguin, arm);
+        Vector3f handPixels = grip.handPixels();
+        Quaternionf wingRotation = grip.rotation();
 
         Quaternionf held = new Quaternionf(wingRotation)
                 .mul(Axis.XP.rotationDegrees(-90.0F))

@@ -2,10 +2,14 @@ package com.luochun.kusopenguin.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.luochun.kusopenguin.animation.PenguinAction;
+import com.luochun.kusopenguin.client.compat.IronCastingCompatClient;
+import com.luochun.kusopenguin.client.compat.NativeCastingView;
 import java.util.ArrayDeque;
 import net.minecraft.client.model.EntityModel;
+import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.LivingEntity;
+import org.joml.Matrix4f;
 
 /** Nestable render scope: all head/body/decorative passes share one evaluated entity pose. */
 public final class PenguinRenderContext {
@@ -17,6 +21,7 @@ public final class PenguinRenderContext {
         boolean evaluated;PenguinAnimationPose pose;
         boolean postureEvaluated;PenguinPlayerPosture posture;
         boolean danceEvaluated,dancing;
+        boolean castingEvaluated;IronCastingCompatClient.Snapshot casting;
         Frame(LivingEntity entity,EntityModel<?> model,float partial){this.entity=entity;this.model=model;this.partial=partial;}
     }
     private PenguinRenderContext(){}
@@ -42,6 +47,14 @@ public final class PenguinRenderContext {
         if(f==null||f.entity!=entity)return false;
         if(f.danceEvaluated)return f.dancing;
         f.danceEvaluated=true;
+        // Sample the optional Iron casting gate before the dance decision. While the Iron layer
+        // (including its fade) is active, casting owns the pose, so the music dance must not also
+        // claim the draw and prepareBody must still run the adapter/posture corrections.
+        if(casting()!=null)return f.dancing=false;
+        // Native Iron caster view: native Geo bones already own the animation. Never replace a
+        // caster clip with the Kuso taunt/kick/dance selection.
+        if(f.model instanceof NativeCastingView view&&view.kusoPenguin$ready())
+            return f.dancing=false;
         if(!PenguinMeshPreview.isEnabled()||!PenguinRenderSupport.shouldReplace(entity)
                 ||PenguinDeathClient.rendering(entity))return false;
         boolean revival=com.luochun.kusopenguin.client.revival.RevivalClientState.pole(entity);
@@ -54,6 +67,60 @@ public final class PenguinRenderContext {
         }
         PenguinPlayerPosture p=posture();
         return f.dancing=p==null||!p.suppressesSpecialClips();
+    }
+    /**
+     * One optional Iron casting snapshot per draw. Death and an active FLYING_KICK keep priority;
+     * otherwise a live Iron layer (including fade) replaces taunt/music dance only while the iron
+     * mod, its associated {@code irons_spellbooks:animation} layer and the PlayerAnimator applier
+     * are all active. Returns null for non-players, no penguin effect, or missing optional classes.
+     */
+    static IronCastingCompatClient.Snapshot casting(){
+        Frame f=FRAMES.get().peek();
+        if(f==null)return null;
+        if(f.castingEvaluated)return f.casting;
+        f.castingEvaluated=true;
+        if(!(f.entity instanceof AbstractClientPlayer player)
+                ||!PenguinMeshPreview.isEnabled()
+                ||!PenguinRenderSupport.shouldReplace(f.entity)
+                ||PenguinDeathClient.rendering(f.entity))return null;
+        IronCastingCompatClient.Snapshot snapshot=IronCastingCompatClient.snapshot(player);
+        if(snapshot==null)return null;
+        PenguinAction action=PenguinPoseClient.action(f.entity);
+        if(action==PenguinAction.DEATH)return null;
+        if(action==PenguinAction.FLYING_KICK){
+            PenguinAnimationClip clip=PenguinMeshModel.animationClip(action);
+            float age=PenguinPoseClient.age(f.entity,action,f.partial);
+            if(clip!=null&&age>=0&&age<clip.totalDuration())return null;
+        }
+        f.casting=snapshot;
+        return snapshot;
+    }
+    /** True only while the current draw actually uses the optional casting pose. */
+    public static boolean isCasting(LivingEntity entity){
+        Frame f=FRAMES.get().peek();
+        return f!=null&&f.entity==entity&&casting()!=null;
+    }
+    /**
+     * Item-channel access for the held-item layer through the same one-draw casting snapshot. It
+     * returns null when casting is inactive, so the caller must keep the complete original method.
+     * The channel contains final native scale/position/rotation and is never re-read after this.
+     */
+    public static IronCastingCompatClient.ItemChannel castingItemChannel(HumanoidArm arm){
+        IronCastingCompatClient.Snapshot snapshot=casting();
+        if(snapshot==null)return null;
+        return arm==HumanoidArm.LEFT?snapshot.leftItem():snapshot.rightItem();
+    }
+    /**
+     * Removes PlayerAnimator's native upper-layer body bend for the active casting frame. The
+     * caller owns the returned push/pop; false means no frame was pushed. This keeps headgear,
+     * body and held-item layers on one body frame so the cast pose cannot double the bend.
+     */
+    public static boolean pushCastingLayer(PoseStack poseStack,Object layer){
+        IronCastingCompatClient.Snapshot snapshot=casting();
+        if(snapshot==null||!snapshot.bendEnabled())return false;
+        IronCastingCompatClient.Bend body=snapshot.layerBody();
+        return IronCastingCompatClient.pushInverseBodyBend(poseStack,layer,
+                body.direction(),body.amount());
     }
     /** Prone families borrow an upright 2.5-head profile only for the current dance draw. */
     public static PenguinProportions.Profile profile(EntityModel<?> model){
@@ -115,10 +182,25 @@ public final class PenguinRenderContext {
         poseStack.translate(0.0F,0.0F,ELYTRA_PIVOT_BACK_PIXELS/PIXELS_PER_BLOCK);
         return true;
     }
+    /**
+     * Shared 16-joint factory bridge for optional native views outside this package. The matrices
+     * are absolute penguin-model-pixel transforms and the head delta is already rigid.
+     */
+    public static PenguinAnimationPose fromNativeRig(Matrix4f[] world, Matrix4f headDelta,
+                                                     PenguinAnimationClip bind){
+        return PenguinAnimationPose.fromDance(world,headDelta,bind);
+    }
     public static PenguinAnimationPose pose(){
         Frame f=FRAMES.get().peek();if(f==null)return null;
         if(f.evaluated)return f.pose;f.evaluated=true;
         if(shared==null||!PenguinMeshPreview.isEnabled()||!PenguinRenderSupport.shouldReplace(f.entity))return null;
+        // Native Iron caster: build the shared 16-joint pose from the already-animated Geo bones.
+        // This runs before dance/taunt/kick selection and never re-runs native handleAnimations.
+        if(f.model instanceof NativeCastingView view&&view.kusoPenguin$ready()){
+            prepareBody(shared);
+            f.pose=view.kusoPenguin$nativePose(shared,profile(f.model));
+            return f.pose;
+        }
         if(isDanceFrame(f.entity)){
             prepareBody(shared);
             f.pose=com.luochun.kusopenguin.client.revival.RevivalClientState.pole(f.entity)
@@ -132,6 +214,14 @@ public final class PenguinRenderContext {
         // clips; returning null keeps their static slide pose and leaves the server action sets
         // untouched.
         if(PenguinRenderSupport.isProne(f.entity))return null;
+        // Optional Iron casting owns taunt/music dance while its modifier layer is live. Death and
+        // an active FLYING_KICK were already excluded by casting(), so priority is unchanged.
+        IronCastingCompatClient.Snapshot casting=casting();
+        if(casting!=null){
+            prepareBody(shared);
+            f.pose=PenguinCastingPose.evaluate(shared,f.model,profile(f.model),casting);
+            return f.pose;
+        }
         PenguinAction action=PenguinDeathClient.rendering(f.entity)?PenguinAction.DEATH:PenguinPoseClient.action(f.entity);if(action==null)return null;
         PenguinPlayerPosture posture=posture();
         // A non-standing posture uses the native player animation; ordinary taunt/kick clips must

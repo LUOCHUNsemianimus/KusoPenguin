@@ -34,6 +34,15 @@ public final class PenguinRenderSupport {
                 || PenguinEntitySupport.isProneType(type);
     }
 
+    /**
+     * Separate visual-only eligibility for the seven ordinary Iron humanoids. It intentionally does
+     * not feed the action/AI/mana/cooldown sets, and the optional bridge still requires an active
+     * effect, enabled skinned mesh and a complete native bone preflight.
+     */
+    public static boolean isIronHumanoidType(EntityType<?> type) {
+        return com.luochun.kusopenguin.client.compat.IronHumanoidCompatClient.isWhitelisted(type);
+    }
+
     public static boolean isProneType(EntityType<?> type) {
         return PenguinEntitySupport.isProneType(type);
     }
@@ -46,7 +55,7 @@ public final class PenguinRenderSupport {
 
     public static boolean shouldReplace(LivingEntity entity) {
         if(PenguinDeathClient.rendering(entity))return true;
-        if (!isSupportedType(entity.getType())) {
+        if (!isSupportedType(entity.getType()) && !isIronHumanoidType(entity.getType())) {
             return false;
         }        if (entity.isBaby()
                 || entity.isInvisible()

@@ -82,6 +82,28 @@ public abstract class LivingEntityRendererMixin {
                                              LivingEntity entity, float entityYaw,
                                              float renderPartialTick, PoseStack originalPoseStack,
                                              MultiBufferSource originalBuffer, int originalLight) {
+        // PlayerAnimator adds its body bend to every upper layer before this call. For an active
+        // casting frame only, undo that incoming bend once so the cast pose (which already carries
+        // the native bend) does not double it. Non-casting draws push nothing.
+        boolean normalized = PenguinRenderContext.pushCastingLayer(poseStack, layer);
+        try {
+            kusoPenguin$renderLayer(layer, poseStack, buffer, packedLight, layerEntity,
+                    limbSwing, limbSwingAmount, partialTick, ageInTicks, netHeadYaw, headPitch,
+                    entity);
+        } finally {
+            if (normalized) {
+                poseStack.popPose();
+            }
+        }
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private void kusoPenguin$renderLayer(RenderLayer layer, PoseStack poseStack,
+                                         MultiBufferSource buffer, int packedLight,
+                                         Entity layerEntity, float limbSwing,
+                                         float limbSwingAmount, float partialTick,
+                                         float ageInTicks, float netHeadYaw, float headPitch,
+                                         LivingEntity entity) {
         // Body-only overlays are incompatible with the horizontal body. Suppress them only while
         // the prone replacement is active; effect removal restores the complete vanilla layers.
         if ((PenguinRenderSupport.isProne(entity) || PenguinRenderContext.isDanceFrame(entity))

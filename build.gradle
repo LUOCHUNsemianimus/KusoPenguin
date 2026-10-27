@@ -76,6 +76,9 @@ dependencies {
     // Compile against the optional maid API only. It is not jarJar'd, is not listed as a
     // dependency in neoforge.mods.toml, and is loaded only when the mod is actually present.
     compileOnly "maven.modrinth:R0bDWFAW:1.5.3-neoforge+mc1.21.1"
+    // Optional Gecko4 API for the Iron caster bridge. Compile-only, no jarJar, no runtime
+    // requirement in neoforge.mods.toml. The pinned artifact is already in the offline cache.
+    compileOnly("maven.modrinth:geckolib:Grwn5rUB") { transitive = false }
     if (devCompat || withMaid) {
         // runtimeOnly puts the artifact on the dev runtime mod classpath so NeoForge discovers
         // it as a mod; additionalRuntimeClasspath alone only supplied library classes.

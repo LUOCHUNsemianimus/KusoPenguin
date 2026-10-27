@@ -35,6 +35,9 @@
     "WardenEmissiveLayerMixin",
     "CarriedBlockLayerMixin",
     "IronGolemFlowerLayerMixin",
+    "IronGeoEntityRendererMixin",
+    "IronGeoArmorLayerMixin",
+    "IronHumanoidRendererMixin",
     "MinecraftAttackMixin"
   ],
   "injectors": {
