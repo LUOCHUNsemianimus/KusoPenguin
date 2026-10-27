@@ -76,7 +76,10 @@ public abstract class MaidGeoHeldLayerMixin {
         ci.cancel();
     }
 
-    /** One canonical wing frame: C, the shared hand helper, then the native TLM item tail. */
+    /**
+     * One canonical wing frame: C, the shared hand helper, then the native TLM item tail. The item
+     * is rendered directly in that canonical frame; no inverse C follows the tail.
+     */
     private void draw(Mob entity, ItemStack stack, ItemDisplayContext context, HumanoidArm arm,
                       PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
         poseStack.pushPose();
@@ -95,10 +98,11 @@ public abstract class MaidGeoHeldLayerMixin {
             poseStack.mulPose(Axis.YP.rotationDegrees(180.0F));
             poseStack.translate((left ? -1.0F : 1.0F) / 16.0F, 0.125F, -0.625F);
             GunClientUtil.addItemTranslate(poseStack, stack, left);
-            // Return the complete canonical placement to the native layer frame as
-            // C * hand * tail * C^-1, so item geometry keeps its normal upright orientation.
-            poseStack.translate(0.0F, 1.5F, 0.0F);
-            poseStack.scale(-1.0F, -1.0F, 1.0F);
+            // Coordinate boundary: C and applyHand leave the stack in the canonical penguin
+            // frame (Y-down, model pixels), which is also the frame of item vertices. The vanilla
+            // tail is a frame-local operator, so renderItem must receive N*C*H*vanillaTail.
+            // Appending C^-1 here would treat canonical item geometry as a native operator and
+            // mirror it, so the previous trailing translate/scale is deliberately absent.
             this.itemInHandRenderer.renderItem(entity, stack, context, left, poseStack, buffer,
                     packedLight);
         } finally {

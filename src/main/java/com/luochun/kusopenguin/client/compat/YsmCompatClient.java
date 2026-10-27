@@ -600,13 +600,17 @@ public final class YsmCompatClient {
                 return;
             }
             Frame frame = view.frame;
-            // YSM native bones are Bedrock-named. Anatomical right limbs drive the penguin parts
-            // on the entity's right side, matching the shared humanoid/Bedrock wing contract.
+            // Mapping follows the coordinate chain, not the Bedrock bone name. The runtime YSM
+            // default model reports native RightArm pivotX=+3.4, LeftArm=-3.4, RightLeg=+2.4,
+            // LeftLeg=-2.4; C flips native X, so RightArm lands on canonical leftWing
+            // (-5.45, anatomical right) and LeftArm on rightWing (+5.45, anatomical left).
+            // Legs use the same side mapping. The original card's absolute rotations, native
+            // capture, head and all other rig parts are unchanged.
             copy(frame, "Body", penguin.body());
-            copy(frame, "RightArm", penguin.rightWing());
-            copy(frame, "LeftArm", penguin.leftWing());
-            copy(frame, "RightLeg", penguin.rightFoot());
-            copy(frame, "LeftLeg", penguin.leftFoot());
+            copy(frame, "RightArm", penguin.leftWing());
+            copy(frame, "LeftArm", penguin.rightWing());
+            copy(frame, "RightLeg", penguin.leftFoot());
+            copy(frame, "LeftLeg", penguin.rightFoot());
         }
 
         private static void copy(Frame frame, String name, ModelPart target) {

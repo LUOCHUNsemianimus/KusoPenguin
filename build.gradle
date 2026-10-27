@@ -34,6 +34,19 @@ repositories {
 }
 sourceSets.main.resources { exclude '**/*.bbmodel' }
 
+// Development-only optional compatibility mods. `devCompat` is on by default so an ordinary
+// `runClient` exercises the optional maid/YSM paths. Neither artifact is jarJar'd or declared in
+// neoforge.mods.toml; production packaging is unchanged.
+def devCompat = !project.hasProperty('devCompat')
+        || project.property('devCompat').toString() == 'true'
+def withMaid = project.hasProperty('withMaid')
+        && project.property('withMaid').toString() == 'true'
+// Keep the pinned filename out of any user profile. Override with -PysmDevJar=<path> only when
+// using a different verified local copy; dev-libs/ is ignored by Git.
+def devYsmJar = file(project.findProperty('ysmDevJar')
+        ?: 'dev-libs/ysm-2.6.5-neoforge+mc1.21.1-release.jar')
+
+
 neoForge {
     version = project.neo_version
     parchment {
@@ -63,11 +76,80 @@ dependencies {
     // Compile against the optional maid API only. It is not jarJar'd, is not listed as a
     // dependency in neoforge.mods.toml, and is loaded only when the mod is actually present.
     compileOnly "maven.modrinth:R0bDWFAW:1.5.3-neoforge+mc1.21.1"
-    if (project.hasProperty('withMaid') && project.property('withMaid').toString() == 'true') {
+    if (devCompat || withMaid) {
         // runtimeOnly puts the artifact on the dev runtime mod classpath so NeoForge discovers
         // it as a mod; additionalRuntimeClasspath alone only supplied library classes.
         runtimeOnly "maven.modrinth:R0bDWFAW:1.5.3-neoforge+mc1.21.1"
     }
+    if (devCompat) {
+        // Pinned local YSM 2.6.5 dev jar. Runtime-only and dev-only: no jarJar, no mods.toml
+        // dependency, and a missing file never breaks classes/build.
+        runtimeOnly files(devYsmJar)
+    }
+}
+
+// Production-compatible TEST launch used by the default `runClient`. The dev ModDevGradle
+// JavaExec launcher is left intact for -PdevCompat=false (source hot swap / IDE debugging).
+// This task is the only place that requires the ignored local config and YSM jar, so missing
+// dev files never break classes/build or IDE import.
+def compatPython = project.findProperty('compatPython') ?: 'python'
+def compatScript = file('tools/launch_compat_client.py')
+def compatConfig = file(project.findProperty('compatConfig') ?: 'dev-libs/compat-launch.json')
+// Separate game dirs: compat copies jars into run/compat-client/mods, while the native
+// -PdevCompat=false launch keeps run/. Sharing run/ would expose those copies to the native
+// mod classpath and duplicate Kuso/YSM.
+def compatGameDir = file(project.findProperty('compatGameDir') ?: 'run/compat-client')
+
+tasks.register('runCompatClient', Exec) {
+    group = 'application'
+    description = 'Launch the isolated production-compatible NeoForge client (devCompat only).'
+    dependsOn tasks.named('jar')
+    onlyIf { devCompat }
+    standardOutput = System.out
+    errorOutput = System.err
+    doFirst {
+        def modJar = tasks.named('jar').get().archiveFile.get().asFile
+        if (!modJar.isFile()) {
+            throw new GradleException("runCompatClient requires the built mod jar: ${modJar}")
+        }
+        if (!compatScript.isFile()) {
+            throw new GradleException("runCompatClient launcher not found: ${compatScript}")
+        }
+        if (!devYsmJar.isFile()) {
+            throw new GradleException(
+                    "devCompat=true requires the local YSM 2.6.5 jar at ${devYsmJar}. " +
+                    "Copy the verified backup there, pass -PysmDevJar=<path>, or use " +
+                    "-PdevCompat=false for the native source launch.")
+        }
+        if (!compatConfig.isFile()) {
+            throw new GradleException(
+                    "runCompatClient requires the ignored local config ${compatConfig}. " +
+                    "See docs/BREWING_REVIVAL.md for the four required path keys.")
+        }
+        def runtimeJars = configurations.runtimeClasspath.resolve()
+        def maidJar = runtimeJars.find {
+            it.name.contains('1.5.3-neoforge+mc1.21.1') || it.name.toLowerCase().contains('touhoulittlemaid')
+        }
+        if (maidJar == null || !maidJar.isFile()) {
+            throw new GradleException(
+                    "runCompatClient could not resolve the pinned TLM 1.5.3 runtime jar; " +
+                    "use -PdevCompat=false or fix the runtime dependency resolution.")
+        }
+        commandLine compatPython, compatScript.absolutePath,
+                '--config', compatConfig.absolutePath,
+                '--game-dir', compatGameDir.absolutePath,
+                '--mod-jar', modJar.absolutePath,
+                '--maid-jar', maidJar.absolutePath,
+                '--ysm-jar', devYsmJar.absolutePath
+    }
+}
+
+tasks.matching { it.name == 'runClient' }.configureEach {
+    dependsOn tasks.named('runCompatClient')
+    // The dependency above performs the real launch. Skip the native JavaExec only after that
+    // dependency has finished; with -PdevCompat=false runCompatClient is skipped and this task
+    // keeps the unmodified ModDevGradle source/debug flow.
+    onlyIf { !devCompat }
 }
 
 tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }

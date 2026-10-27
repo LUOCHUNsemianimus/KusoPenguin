@@ -338,10 +338,15 @@ public final class MaidGeoCompatClient {
         /**
          * Copies native Gecko bone animation into the shared penguin parts.
          *
-         * <p>GeoBuilder already negates JSON X in the native bind, so the anatomical mapping is
-         * {@code RightArm -> rightWing}, {@code LeftArm -> leftWing}, and likewise for the legs.
-         * Rotations are conjugated by C (X/Y signs invert, Z keeps its sign). Position offsets are
-         * model pixels, not blocks: native {@code -positionX/16} becomes canonical
+         * <p>Mapping follows the coordinate chain, not the bone name. {@code GeoBuilder} negates
+         * JSON pivot X ({@code -pivot.x}) and the canonical transform C negates native X again, so
+         * the final canonical X side has the same sign as the JSON X. For the winefox source,
+         * {@code RightArm} has JSON {@code pivotX=-3.25} and lands on canonical
+         * {@code leftWing} ({@code x=-5.45}, anatomical right); {@code LeftArm} has
+         * {@code pivotX=+3.25} and lands on {@code rightWing} ({@code x=+5.45}, anatomical left).
+         * The legs use the same side mapping. Rotations are copied as absolute native values
+         * conjugated by C (-X,-Y,+Z), never as bind-relative deltas. Position offsets are model
+         * pixels, not blocks: native {@code -positionX/16} becomes canonical
          * {@code +positionX}, while Y/Z keep their C^-1 signs. Missing limbs deliberately keep the
          * neutral penguin bind pose.
          */
@@ -356,10 +361,10 @@ public final class MaidGeoCompatClient {
             }
             Map<String, AnimatedGeoBone> bones = model.bones();
             copyAnimated(bones.get("Body"), penguin.body());
-            copyAnimated(bones.get("RightArm"), penguin.rightWing());
-            copyAnimated(bones.get("LeftArm"), penguin.leftWing());
-            copyAnimated(bones.get("RightLeg"), penguin.rightFoot());
-            copyAnimated(bones.get("LeftLeg"), penguin.leftFoot());
+            copyAnimated(bones.get("RightArm"), penguin.leftWing());
+            copyAnimated(bones.get("LeftArm"), penguin.rightWing());
+            copyAnimated(bones.get("RightLeg"), penguin.leftFoot());
+            copyAnimated(bones.get("LeftLeg"), penguin.rightFoot());
         }
 
         private static void copyAnimated(AnimatedGeoBone source, ModelPart target) {

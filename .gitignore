@@ -41,3 +41,5 @@ repo/
 !**/src/**/repo/
 **/__pycache__/
 *.pyc
+# Local development-only compatibility jars (pinned YSM 2.6.5 etc.); never packaged.
+dev-libs/
