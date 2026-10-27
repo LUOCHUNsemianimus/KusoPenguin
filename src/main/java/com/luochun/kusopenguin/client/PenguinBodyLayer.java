@@ -17,6 +17,10 @@ import net.minecraft.world.entity.LivingEntity;
  * <p>Upright families keep their adapter/profile transform. The seven prone animals use one
  * whole-assembly transform from {@link PenguinPronePose}: translating and rotating only the torso
  * would leave wings and feet standing through the ground.
+ *
+ * <p>{@link #renderCanonicalBody} is the single canonical body entry point. The optional Gecko
+ * renderer calls it after applying the vanilla model flip, so both native Gecko head rendering
+ * and the shared body reuse exactly the same profile, pose evaluation and mesh drawing code.
  */
 public final class PenguinBodyLayer<T extends LivingEntity, M extends EntityModel<T>>
         extends RenderLayer<T, M> {
@@ -42,37 +46,79 @@ public final class PenguinBodyLayer<T extends LivingEntity, M extends EntityMode
         if (!prone && ((adapter == null && !dancing) || profile == null)) {
             return;
         }
+        if (!prone) {
+            // Canonical upright body used by the vanilla head-only pass and the Gecko renderer.
+            renderCanonicalBody(poseStack, buffer, packedLight, livingEntity,
+                    this.getParentModel());
+            return;
+        }
 
         PenguinRenderContext.prepareBody(this.penguin);
         PenguinMeshModel mesh = PenguinMeshPreview.isEnabled()
                 ? PenguinMeshModel.current()
                 : null;
-        VertexConsumer vertexConsumer = buffer.getBuffer(RenderType.entityCutoutNoCull(
-                mesh != null ? PenguinMeshModel.TEXTURE : PenguinBodyModel.TEXTURE));
+        VertexConsumer vertexConsumer = bodyBuffer(buffer, mesh);
         int packedOverlay = LivingEntityRenderer.getOverlayCoords(livingEntity, 0.0F);
         poseStack.pushPose();
         try {
-            if (prone) {
-                // Single transform for all five roots: offset from the measured floor bound,
-                // family scale, then the +90 degree X lay-down rotation.
-                PenguinPronePose.applyBodyTransform(poseStack, this.penguin,
-                        this.getParentModel(), mesh);
-            } else {
-                // Each family has an explicit neck and floor anchor; head shift and body offset
-                // differ when the native head is not attached at model Y=0.
-                poseStack.translate(0.0F, profile.bodyOffsetBlocks(), 0.0F);
-                poseStack.scale(profile.bodyScale(), profile.bodyScale(), profile.bodyScale());
-            }
-            PenguinAnimationPose animated=PenguinRenderContext.pose();
-            if(mesh!=null&&animated!=null){
-                PenguinMeshModel.currentSkin().render(poseStack,vertexConsumer,packedLight,packedOverlay,-1,animated);
-            } else if (mesh != null) {
-                mesh.render(poseStack, vertexConsumer, packedLight, packedOverlay, -1, this.penguin);
-            } else {
-                this.penguin.renderToBuffer(poseStack, vertexConsumer, packedLight, packedOverlay, -1);
-            }
+            // Single transform for all five roots: offset from the measured floor bound,
+            // family scale, then the +90 degree X lay-down rotation.
+            PenguinPronePose.applyBodyTransform(poseStack, this.penguin,
+                    this.getParentModel(), mesh);
+            drawBody(poseStack, vertexConsumer, packedLight, packedOverlay, this.penguin, mesh);
         } finally {
             poseStack.popPose();
+        }
+    }
+
+    /**
+     * Draws the prepared shared body in the canonical penguin model frame (Y-down, floor Y=24).
+     * The caller owns the canonical frame: vanilla layers receive it from
+     * {@code LivingEntityRenderer}; the Gecko bridge applies C explicitly. This method adds the
+     * profile body offset/scale and owns its own push/pop.
+     */
+    public static void renderCanonicalBody(PoseStack poseStack, MultiBufferSource buffer,
+                                           int packedLight, LivingEntity entity,
+                                           EntityModel<?> originalModel) {
+        PenguinBodyModel penguin = PenguinRenderContext.sharedModel();
+        PenguinProportions.Profile profile = PenguinRenderContext.profile(originalModel);
+        if (penguin == null || profile == null) {
+            return;
+        }
+        PenguinRenderContext.prepareBody(penguin);
+        PenguinMeshModel mesh = PenguinMeshPreview.isEnabled()
+                ? PenguinMeshModel.current()
+                : null;
+        VertexConsumer vertexConsumer = bodyBuffer(buffer, mesh);
+        int packedOverlay = LivingEntityRenderer.getOverlayCoords(entity, 0.0F);
+        poseStack.pushPose();
+        try {
+            // Each family has an explicit neck and floor anchor; head shift and body offset
+            // differ when the native head is not attached at model Y=0.
+            poseStack.translate(0.0F, profile.bodyOffsetBlocks(), 0.0F);
+            poseStack.scale(profile.bodyScale(), profile.bodyScale(), profile.bodyScale());
+            drawBody(poseStack, vertexConsumer, packedLight, packedOverlay, penguin, mesh);
+        } finally {
+            poseStack.popPose();
+        }
+    }
+
+    private static VertexConsumer bodyBuffer(MultiBufferSource buffer, PenguinMeshModel mesh) {
+        return buffer.getBuffer(RenderType.entityCutoutNoCull(
+                mesh != null ? PenguinMeshModel.TEXTURE : PenguinBodyModel.TEXTURE));
+    }
+
+    private static void drawBody(PoseStack poseStack, VertexConsumer vertexConsumer,
+                                 int packedLight, int packedOverlay, PenguinBodyModel penguin,
+                                 PenguinMeshModel mesh) {
+        PenguinAnimationPose animated = PenguinRenderContext.pose();
+        if (mesh != null && animated != null) {
+            PenguinMeshModel.currentSkin().render(poseStack, vertexConsumer, packedLight,
+                    packedOverlay, -1, animated);
+        } else if (mesh != null) {
+            mesh.render(poseStack, vertexConsumer, packedLight, packedOverlay, -1, penguin);
+        } else {
+            penguin.renderToBuffer(poseStack, vertexConsumer, packedLight, packedOverlay, -1);
         }
     }
 }

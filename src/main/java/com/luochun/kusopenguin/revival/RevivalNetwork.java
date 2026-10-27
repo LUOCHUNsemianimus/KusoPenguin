@@ -13,11 +13,18 @@ public final class RevivalNetwork {
 
     @SubscribeEvent
     public static void register(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar("6");
+        var registrar = event.registrar("8");
         registrar.playToServer(RevivalPackets.Request.TYPE, RevivalPackets.Request.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
                     if (context.player() instanceof ServerPlayer player) {
                         RevivalManager.request(player, payload.target());
+                    }
+                }));
+        registrar.playToServer(RevivalPackets.Control.TYPE, RevivalPackets.Control.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) {
+                        RevivalManager.control(player, payload.token(), payload.hand(),
+                                payload.action());
                     }
                 }));
         registrar.playToClient(RevivalPackets.State.TYPE, RevivalPackets.State.STREAM_CODEC,

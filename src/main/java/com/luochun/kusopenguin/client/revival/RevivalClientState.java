@@ -12,12 +12,11 @@ import net.minecraft.world.entity.LivingEntity;
 
 /**
  * Purely presentational mirror of the server's revival channel. Entries are strictly bounded:
- * active entries expire after the 8-second ritual plus a one-second transit grace, and an old
- * stop packet can never overwrite a newer start.
+ * the corpse ritual lives for 8 seconds and the held-film ritual for 5 seconds, each plus a
+ * one-second transit grace. An old stop packet can never overwrite a newer start.
  */
 public final class RevivalClientState {
-    private static final long EXPIRY_MILLIS =
-            RevivalManager.DURATION_TICKS * 50L + 1_000L;
+    private static final long GRACE_MILLIS = 1_000L;
 
     private record Key(ResourceLocation dimension, UUID caster) {
     }
@@ -45,6 +44,7 @@ public final class RevivalClientState {
         ENTRIES.put(key, new Entry(payload.entityId(), payload.target(),
                 payload.maidTarget(), payload.startedGameTime(), payload.session(), payload.active(),
                 System.currentTimeMillis()));
+        RevivalClient.handleState(payload);
     }
 
     /** A newer start wins; a delayed stop from an older session is ignored. */
@@ -71,6 +71,12 @@ public final class RevivalClientState {
     public static UUID target(LivingEntity entity) {
         Entry entry = entry(entity);
         return entry == null ? null : entry.target();
+    }
+
+    /** Corpse-token target only; a film hold token must never be sent back as a corpse request. */
+    public static UUID corpseTarget(LivingEntity entity) {
+        Entry entry = entry(entity);
+        return entry == null || entry.maidTarget() ? null : entry.target();
     }
 
     private static Entry entry(LivingEntity entity) {
@@ -104,7 +110,14 @@ public final class RevivalClientState {
     }
 
     private static boolean expired(Entry entry) {
-        return System.currentTimeMillis() - entry.receivedAtMillis() > EXPIRY_MILLIS;
+        return System.currentTimeMillis() - entry.receivedAtMillis() > expiryMillis(entry);
+    }
+
+    /** The State packet keeps the maid flag: 100 ticks for film, 160 ticks for the player path. */
+    private static long expiryMillis(Entry entry) {
+        long ticks = entry.maidTarget() ? RevivalManager.FILM_DURATION_TICKS
+                : RevivalManager.DURATION_TICKS;
+        return ticks * 50L + GRACE_MILLIS;
     }
 
     public static void cleanup() {
@@ -113,7 +126,7 @@ public final class RevivalClientState {
         }
         long now = System.currentTimeMillis();
         ENTRIES.entrySet().removeIf(entry -> !entry.getValue().active()
-                || now - entry.getValue().receivedAtMillis() > EXPIRY_MILLIS);
+                || now - entry.getValue().receivedAtMillis() > expiryMillis(entry.getValue()));
     }
 
     public static void clear() {

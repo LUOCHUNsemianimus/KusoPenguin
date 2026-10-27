@@ -1,5 +1,6 @@
 package com.luochun.kusopenguin.client;
 
+import com.luochun.kusopenguin.client.compat.GeoMaidView;
 import com.luochun.kusopenguin.client.compat.MaidCompatClient;
 import net.minecraft.client.model.CreeperModel;
 import net.minecraft.client.model.IronGolemModel;
@@ -23,6 +24,10 @@ public final class PenguinPoseAdapters {
     }
 
     public static PenguinPoseAdapter find(EntityModel<?> original) {
+        // Optional Gecko maid proxy supplies the five standard roots from the live Gecko bones.
+        if (original instanceof GeoMaidView view) {
+            return view.kusoPenguin$adapter();
+        }
         if (original instanceof WardenModel<?>) return PenguinWardenPose::apply;
         if (original instanceof CreeperModel<?>) return PenguinPoseAdapters::applyCreeper;
         if (original instanceof IronGolemModel<?>) return PenguinPoseAdapters::applyGolem;

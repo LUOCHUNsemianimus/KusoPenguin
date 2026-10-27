@@ -36,22 +36,28 @@ import net.neoforged.neoforge.network.PacketDistributor;
  * respawn transitions live in a map keyed by the running server, never in cross-world statics.
  *
  * <p>A player reservation is keyed by the exact corpse-marker entity UUID (the death-generation
- * token); a maid reservation is keyed by the exact tombstone UUID. Channels stay keyed by caster
- * UUID so the caster can always cancel/replace its own channel.
+ * token). The maid film ritual is a separate per-caster channel opened by a hold-control packet;
+ * it is keyed by a random client hold token and never touches the player channel. Both reuse the
+ * same state packet, animation clock and effect/respawn helpers.
  */
 @EventBusSubscriber(modid = KusoPenguin.MODID, bus = EventBusSubscriber.Bus.GAME)
 public final class RevivalManager {
+    /** Corpse ritual: one K press starts it and a second K press cancels it. */
     public static final int DURATION_TICKS = 160;
+    /** Held-film ritual: the key must stay held for five seconds. */
+    public static final int FILM_DURATION_TICKS = 100;
+    /**
+     * Hold lease. The client pulses every five ticks; the channel becomes invalid once this many
+     * server ticks have elapsed without a matching PULSE. The timeout is deliberately much shorter
+     * than the ritual so releasing K cannot finish the revival even if STOP is lost.
+     */
+    public static final int FILM_LEASE_TICKS = 15;
     private static final double RANGE = 4.0D;
     private static final double LOOK_DOT = 0.82D;
     private static final double MOVE_LIMIT = 0.75D;
     private static final int PROGRESS_INTERVAL = 20;
     private static final int RECREATE_RETRY_TICKS = 20;
     private static final Map<MinecraftServer, ServerState> STATES = new HashMap<>();
-
-    private enum TargetKind {
-        PLAYER, MAID
-    }
 
     /** A dead player's marker record; the token survives marker chunk-unload recreation. */
     private static final class CorpseRecord {
@@ -84,25 +90,48 @@ public final class RevivalManager {
         final ServerLevel level;
         final ServerPlayer caster;
         final UUID targetKey;
-        final TargetKind kind;
         final ServerPlayer targetPlayer;
-        final MaidRevivalCompat.Target maidTarget;
         final Vec3 startPos;
         final long startTick;
         final int session;
 
-        Channel(ServerLevel level, ServerPlayer caster, UUID targetKey, TargetKind kind,
-                ServerPlayer targetPlayer, MaidRevivalCompat.Target maidTarget, Vec3 startPos,
-                long startTick, int session) {
+        Channel(ServerLevel level, ServerPlayer caster, UUID targetKey, ServerPlayer targetPlayer,
+                Vec3 startPos, long startTick, int session) {
             this.level = level;
             this.caster = caster;
             this.targetKey = targetKey;
-            this.kind = kind;
             this.targetPlayer = targetPlayer;
-            this.maidTarget = maidTarget;
             this.startPos = startPos;
             this.startTick = startTick;
             this.session = session;
+        }
+    }
+
+    /**
+     * Held-film channel. The film is a private snapshot; the live main/off slot is compared with
+     * it on every pulse and again at commit. {@code leaseTick} is refreshed only by a matching
+     * PULSE, so a released key, lost packet, or disconnected client cancels within the lease.
+     */
+    private static final class FilmChannel {
+        final ServerLevel level;
+        final ServerPlayer caster;
+        final UUID token;
+        final MaidRevivalCompat.HeldFilm film;
+        final Vec3 startPos;
+        final long startTick;
+        final int session;
+        long leaseTick;
+
+        FilmChannel(ServerLevel level, ServerPlayer caster, UUID token,
+                    MaidRevivalCompat.HeldFilm film, Vec3 startPos, long startTick, int session) {
+            this.level = level;
+            this.caster = caster;
+            this.token = token;
+            this.film = film;
+            this.startPos = startPos;
+            this.startTick = startTick;
+            this.session = session;
+            this.leaseTick = startTick;
         }
     }
 
@@ -110,6 +139,7 @@ public final class RevivalManager {
         final Map<UUID, CorpseRecord> corpses = new HashMap<>();
         final Map<UUID, Channel> channels = new HashMap<>();
         final Map<UUID, Channel> reservations = new HashMap<>();
+        final Map<UUID, FilmChannel> filmChannels = new HashMap<>();
         final Map<UUID, DimensionTransition> pendingRespawns = new HashMap<>();
         int nextSession = 1;
     }
@@ -140,6 +170,11 @@ public final class RevivalManager {
         if (casterChannel != null) {
             cancel(state, casterChannel,
                     Component.translatable("message.kuso_penguin.revival.cancelled"), true);
+        }
+        FilmChannel filmChannel = state.filmChannels.get(player.getUUID());
+        if (filmChannel != null) {
+            cancelFilm(state, filmChannel,
+                    Component.translatable("message.kuso_penguin.revival.film_cancelled"), true);
         }
         cancelTargeting(state, player.getUUID(), false);
         removeCorpse(state, player.getUUID());
@@ -186,6 +221,11 @@ public final class RevivalManager {
         if (channel != null) {
             cancel(state, channel, Component.translatable("message.kuso_penguin.revival.cancelled"), true);
         }
+        FilmChannel film = state.filmChannels.get(player.getUUID());
+        if (film != null) {
+            cancelFilm(state, film,
+                    Component.translatable("message.kuso_penguin.revival.film_cancelled"), true);
+        }
     }
 
     @SubscribeEvent
@@ -195,6 +235,11 @@ public final class RevivalManager {
         }
         ServerState state = stateOrNull(caster.getServer());
         if (state == null || !(event.getEntity() instanceof ServerPlayer tracker)) {
+            return;
+        }
+        FilmChannel film = state.filmChannels.get(caster.getUUID());
+        if (film != null) {
+            PacketDistributor.sendToPlayer(tracker, filmPacket(film, true));
             return;
         }
         Channel channel = state.channels.get(caster.getUUID());
@@ -210,6 +255,27 @@ public final class RevivalManager {
             return;
         }
         pruneCorpses(event.getServer(), state);
+        for (FilmChannel film : new ArrayList<>(state.filmChannels.values())) {
+            if (state.filmChannels.get(film.caster.getUUID()) != film) {
+                continue;
+            }
+            long now = film.level.getGameTime();
+            long elapsed = now - film.startTick;
+            if (elapsed < 0 || now - film.leaseTick >= FILM_LEASE_TICKS || !validFilm(film)) {
+                cancelFilm(state, film,
+                        Component.translatable("message.kuso_penguin.revival.film_cancelled"), true);
+                continue;
+            }
+            if (elapsed % PROGRESS_INTERVAL == 0) {
+                int seconds = (int) Math.max(0,
+                        (FILM_DURATION_TICKS - elapsed + 19) / 20);
+                film.caster.displayClientMessage(Component.translatable(
+                        "message.kuso_penguin.revival.film_progress", seconds), true);
+            }
+            if (elapsed >= FILM_DURATION_TICKS) {
+                completeFilm(state, film);
+            }
+        }
         for (Channel channel : new ArrayList<>(state.channels.values())) {
             if (state.channels.get(channel.caster.getUUID()) != channel) {
                 continue;
@@ -223,12 +289,12 @@ public final class RevivalManager {
                 int seconds = (int) Math.max(0, (DURATION_TICKS - elapsed + 19) / 20);
                 Component progress = Component.translatable("message.kuso_penguin.revival.progress", seconds);
                 channel.caster.displayClientMessage(progress, true);
-                if (channel.kind == TargetKind.PLAYER && channel.targetPlayer.connection != null) {
+                if (channel.targetPlayer.connection != null) {
                     channel.targetPlayer.displayClientMessage(progress, true);
                 }
             }
             if (elapsed >= DURATION_TICKS) {
-                complete(state, channel);
+                completePlayer(state, channel);
             }
         }
     }
@@ -238,13 +304,94 @@ public final class RevivalManager {
         STATES.remove(event.getServer());
     }
 
-    /** Handles an exact death-token/tombstone request from the client; never assigns by owner. */
+    /**
+     * Explicit START/PULSE/STOP from the client hold. A STOP or PULSE with a stale token is
+     * ignored, so it can never cancel or refresh a newer ritual; only the film map is touched,
+     * never the corpse channel.
+     */
+    public static void control(ServerPlayer caster, UUID token, net.minecraft.world.InteractionHand hand,
+                               RevivalPackets.Action action) {
+        MinecraftServer server = caster.getServer();
+        if (server == null || token == null || hand == null || action == null
+                || !(caster.level() instanceof ServerLevel level)) {
+            return;
+        }
+        ServerState state = state(server);
+        switch (action) {
+            case START -> startFilm(state, caster, level, token, hand);
+            case PULSE -> pulseFilm(state, caster, token);
+            case STOP -> stopFilm(state, caster, token);
+        }
+    }
+
+    private static void startFilm(ServerState state, ServerPlayer caster, ServerLevel level,
+                                  UUID token, net.minecraft.world.InteractionHand hand) {
+        long now = level.getGameTime();
+        FilmChannel existing = state.filmChannels.get(caster.getUUID());
+        if (existing != null) {
+            // A duplicated START is idempotent only for the same key hold and the same bound hand.
+            // A stale or differently-bound START must not replace an active hold token.
+            if (existing.token.equals(token) && existing.film.hand() == hand) {
+                existing.leaseTick = now;
+            }
+            return;
+        }
+        if (state.channels.containsKey(caster.getUUID())) {
+            return;
+        }
+        if (!caster.isAlive() || caster.isSpectator() || !caster.hasEffect(ModEffects.PENGUIN)) {
+            fail(caster, "message.kuso_penguin.revival.effect_required");
+            return;
+        }
+        MaidRevivalCompat.HeldFilm film = MaidRevivalCompat.findHeldFilm(caster, hand);
+        if (film == null) {
+            fail(caster, "message.kuso_penguin.revival.film_required");
+            return;
+        }
+        FilmChannel channel = new FilmChannel(level, caster, token, film, caster.position(), now,
+                state.nextSession++);
+        state.filmChannels.put(caster.getUUID(), channel);
+        PacketDistributor.sendToPlayersTrackingEntityAndSelf(caster, filmPacket(channel, true));
+        caster.displayClientMessage(
+                Component.translatable("message.kuso_penguin.revival.film_started"), true);
+    }
+
+    private static void pulseFilm(ServerState state, ServerPlayer caster, UUID token) {
+        FilmChannel channel = state.filmChannels.get(caster.getUUID());
+        if (channel == null || channel.caster != caster || !channel.token.equals(token)) {
+            return;
+        }
+        if (!validFilm(channel)) {
+            cancelFilm(state, channel,
+                    Component.translatable("message.kuso_penguin.revival.film_cancelled"), true);
+            return;
+        }
+        channel.leaseTick = channel.level.getGameTime();
+    }
+
+    private static void stopFilm(ServerState state, ServerPlayer caster, UUID token) {
+        FilmChannel channel = state.filmChannels.get(caster.getUUID());
+        if (channel == null || channel.caster != caster || !channel.token.equals(token)) {
+            return;
+        }
+        cancelFilm(state, channel,
+                Component.translatable("message.kuso_penguin.revival.film_cancelled"), true);
+    }
+
+    /**
+     * Exact death-token request from the client. The former tombstone/grave K target is gone: a
+     * maid film is now revived by holding K, not by aiming at the grave.
+     */
     public static void request(ServerPlayer caster, UUID target) {
         MinecraftServer server = caster.getServer();
         if (server == null || !(caster.level() instanceof ServerLevel level)) {
             return;
         }
         ServerState state = state(server);
+        if (state.filmChannels.containsKey(caster.getUUID())) {
+            fail(caster, "message.kuso_penguin.revival.film_busy");
+            return;
+        }
         Channel active = state.channels.get(caster.getUUID());
         if (active != null) {
             cancel(state, active, Component.translatable("message.kuso_penguin.revival.cancelled"), true);
@@ -268,35 +415,23 @@ public final class RevivalManager {
         }
 
         CorpseRecord record = findCorpse(state, target);
-        if (record != null) {
-            ServerPlayer targetPlayer = record.player;
-            if (!isCurrent(server, targetPlayer) || targetPlayer == caster
-                    || !targetPlayer.isDeadOrDying()
-                    || targetPlayer.serverLevel() != level
-                    || !record.dimension.equals(level.dimension())
-                    || record.corpse == null || record.corpse.isRemoved()
-                    || !record.token.equals(record.corpse.getUUID())
-                    || !lookingAt(caster, record.corpse)) {
-                fail(caster, "message.kuso_penguin.revival.invalid_target");
-                return;
-            }
-            start(state, new Channel(level, caster, target, TargetKind.PLAYER, targetPlayer, null,
-                    caster.position(), level.getGameTime(), state.nextSession++));
-            return;
-        }
-
-        MaidRevivalCompat.Target maid = MaidRevivalCompat.findTarget(level, caster, target);
-        if (maid == null) {
+        if (record == null) {
             fail(caster, "message.kuso_penguin.revival.invalid_target");
             return;
         }
-        Entity tombstone = (Entity) maid.tombstone();
-        if (!lookingAt(caster, tombstone)) {
+        ServerPlayer targetPlayer = record.player;
+        if (!isCurrent(server, targetPlayer) || targetPlayer == caster
+                || !targetPlayer.isDeadOrDying()
+                || targetPlayer.serverLevel() != level
+                || !record.dimension.equals(level.dimension())
+                || record.corpse == null || record.corpse.isRemoved()
+                || !record.token.equals(record.corpse.getUUID())
+                || !lookingAt(caster, record.corpse)) {
             fail(caster, "message.kuso_penguin.revival.invalid_target");
             return;
         }
-        start(state, new Channel(level, caster, target, TargetKind.MAID, null, maid,
-                caster.position(), level.getGameTime(), state.nextSession++));
+        start(state, new Channel(level, caster, target, targetPlayer, caster.position(),
+                level.getGameTime(), state.nextSession++));
     }
 
     private static void start(ServerState state, Channel channel) {
@@ -317,29 +452,59 @@ public final class RevivalManager {
                 || caster.position().distanceToSqr(channel.startPos) > MOVE_LIMIT * MOVE_LIMIT) {
             return false;
         }
-        if (channel.kind == TargetKind.PLAYER) {
-            ServerPlayer target = channel.targetPlayer;
-            ServerState state = stateOrNull(caster.getServer());
-            CorpseRecord record = state == null ? null : state.corpses.get(target.getUUID());
-            return target.isDeadOrDying() && target.serverLevel() == channel.level
-                    && record != null && record.player == target
-                    && record.token.equals(channel.targetKey)
-                    && record.dimension.equals(channel.level.dimension())
-                    && record.corpse != null && !record.corpse.isRemoved()
-                    && record.token.equals(record.corpse.getUUID())
-                    && isCurrent(caster.getServer(), target)
-                    && caster.position().distanceToSqr(target.position()) <= RANGE * RANGE;
-        }
-        return MaidRevivalCompat.validate(channel.level, caster, channel.maidTarget)
-                && caster.position().distanceToSqr(channel.maidTarget.position()) <= RANGE * RANGE;
+        ServerPlayer target = channel.targetPlayer;
+        ServerState state = stateOrNull(caster.getServer());
+        CorpseRecord record = state == null ? null : state.corpses.get(target.getUUID());
+        return target.isDeadOrDying() && target.serverLevel() == channel.level
+                && record != null && record.player == target
+                && record.token.equals(channel.targetKey)
+                && record.dimension.equals(channel.level.dimension())
+                && record.corpse != null && !record.corpse.isRemoved()
+                && record.token.equals(record.corpse.getUUID())
+                && isCurrent(caster.getServer(), target)
+                && caster.position().distanceToSqr(target.position()) <= RANGE * RANGE;
     }
 
-    private static void complete(ServerState state, Channel channel) {
-        if (channel.kind == TargetKind.PLAYER) {
-            completePlayer(state, channel);
-        } else {
-            completeMaid(state, channel);
+    /**
+     * The live caster and the exact copied film stack are checked on every pulse and every tick:
+     * alive/effect/dimension/hand/selected slot/item data/count/movement all take part.
+     */
+    private static boolean validFilm(FilmChannel channel) {
+        ServerPlayer caster = channel.caster;
+        return !caster.isRemoved() && caster.isAlive() && caster.connection != null
+                && !caster.isSpectator()
+                && caster.serverLevel() == channel.level
+                && isCurrent(caster.getServer(), caster)
+                && caster.hasEffect(ModEffects.PENGUIN)
+                && !caster.isPassenger() && !caster.isSwimming() && !caster.isFallFlying()
+                && !PenguinKick.active(caster)
+                && caster.position().distanceToSqr(channel.startPos) <= MOVE_LIMIT * MOVE_LIMIT
+                && MaidRevivalCompat.matches(caster, channel.film);
+    }
+
+    /** Runs only after the 100-tick hold and before any film mutation. */
+    private static void completeFilm(ServerState state, FilmChannel channel) {
+        if (channel.level.getGameTime() - channel.leaseTick >= FILM_LEASE_TICKS
+                || !validFilm(channel)) {
+            cancelFilm(state, channel,
+                    Component.translatable("message.kuso_penguin.revival.film_cancelled"), true);
+            return;
         }
+        Vec3 safe = findSafePosition(channel.level, channel.caster.position());
+        if (safe == null) {
+            cancelFilm(state, channel,
+                    Component.translatable("message.kuso_penguin.revival.no_safe_spot"), true);
+            return;
+        }
+        if (!MaidRevivalCompat.resurrectFromHeld(channel.level, channel.caster, channel.film, safe)) {
+            cancelFilm(state, channel,
+                    Component.translatable("message.kuso_penguin.revival.maid_failed"), true);
+            return;
+        }
+        state.filmChannels.remove(channel.caster.getUUID(), channel);
+        PacketDistributor.sendToPlayersTrackingEntityAndSelf(channel.caster, filmPacket(channel, false));
+        channel.caster.displayClientMessage(
+                Component.translatable("message.kuso_penguin.revival.film_success"), true);
     }
 
     /**
@@ -392,23 +557,6 @@ public final class RevivalManager {
         }
     }
 
-    private static void completeMaid(ServerState state, Channel channel) {
-        Vec3 safe = findSafePosition(channel.level, channel.maidTarget.position());
-        if (safe == null) {
-            cancel(state, channel, Component.translatable("message.kuso_penguin.revival.no_safe_spot"), true);
-            return;
-        }
-        if (!MaidRevivalCompat.resurrect(channel.level, channel.caster, channel.maidTarget, safe)) {
-            cancel(state, channel, Component.translatable("message.kuso_penguin.revival.maid_failed"), true);
-            return;
-        }
-        state.channels.remove(channel.caster.getUUID(), channel);
-        state.reservations.remove(channel.targetKey, channel);
-        PacketDistributor.sendToPlayersTrackingEntityAndSelf(channel.caster, packet(channel, false));
-        channel.caster.displayClientMessage(
-                Component.translatable("message.kuso_penguin.revival.success"), true);
-    }
-
     private static void cancel(ServerState state, Channel channel, Component message, boolean notify) {
         if (!state.channels.remove(channel.caster.getUUID(), channel)) {
             return;
@@ -422,11 +570,30 @@ public final class RevivalManager {
         }
     }
 
+    private static void cancelFilm(ServerState state, FilmChannel channel, Component message,
+                                   boolean notify) {
+        if (!state.filmChannels.remove(channel.caster.getUUID(), channel)) {
+            return;
+        }
+        if (channel.caster.connection != null) {
+            PacketDistributor.sendToPlayersTrackingEntityAndSelf(channel.caster,
+                    filmPacket(channel, false));
+            if (notify) {
+                channel.caster.displayClientMessage(message, true);
+            }
+        }
+    }
+
     private static void cleanupPlayer(ServerState state, UUID playerId) {
         removeCorpse(state, playerId);
         Channel caster = state.channels.get(playerId);
         if (caster != null) {
             cancel(state, caster, Component.translatable("message.kuso_penguin.revival.cancelled"), false);
+        }
+        FilmChannel film = state.filmChannels.get(playerId);
+        if (film != null) {
+            cancelFilm(state, film,
+                    Component.translatable("message.kuso_penguin.revival.film_cancelled"), false);
         }
         // Reservations are keyed by the death token, so find channels by target owner instead.
         cancelTargeting(state, playerId, false);
@@ -434,7 +601,7 @@ public final class RevivalManager {
 
     private static void cancelTargeting(ServerState state, UUID playerId, boolean notify) {
         for (Channel channel : new ArrayList<>(state.channels.values())) {
-            if (channel.kind == TargetKind.PLAYER && channel.targetPlayer.getUUID().equals(playerId)) {
+            if (channel.targetPlayer.getUUID().equals(playerId)) {
                 cancel(state, channel,
                         Component.translatable("message.kuso_penguin.revival.cancelled"), notify);
             }
@@ -516,7 +683,13 @@ public final class RevivalManager {
 
     private static RevivalPackets.State packet(Channel channel, boolean active) {
         return new RevivalPackets.State(channel.level.dimension().location(), channel.caster.getId(),
-                channel.caster.getUUID(), channel.targetKey, channel.kind == TargetKind.MAID,
+                channel.caster.getUUID(), channel.targetKey, false,
+                channel.startTick, channel.session, active);
+    }
+
+    private static RevivalPackets.State filmPacket(FilmChannel channel, boolean active) {
+        return new RevivalPackets.State(channel.level.dimension().location(), channel.caster.getId(),
+                channel.caster.getUUID(), channel.token, true,
                 channel.startTick, channel.session, active);
     }
 
@@ -532,7 +705,7 @@ public final class RevivalManager {
                 DimensionTransition.DO_NOTHING);
     }
 
-    /** Same-dimension, loaded, world-border-safe corpse-adjacent stand position with collision. */
+    /** Same-dimension, loaded, world-border-safe stand position with collision. */
     private static Vec3 findSafePosition(ServerLevel level, Vec3 origin) {
         BlockPos base = BlockPos.containing(origin);
         for (int radius = 0; radius <= 2; radius++) {

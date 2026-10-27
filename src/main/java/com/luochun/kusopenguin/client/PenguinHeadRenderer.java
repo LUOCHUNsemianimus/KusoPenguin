@@ -1,5 +1,6 @@
 package com.luochun.kusopenguin.client;
 
+import com.luochun.kusopenguin.client.compat.GeoMaidView;
 import com.luochun.kusopenguin.client.compat.MaidCompatClient;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -56,6 +57,8 @@ public final class PenguinHeadRenderer {
     }
 
     static Matrix4f headMatrix(EntityModel<?> model){
+        // Gecko proxy: native head chain converted to the canonical penguin model frame.
+        if(model instanceof GeoMaidView view)return view.kusoPenguin$headMatrix();
         PenguinProportions.Profile profile=PenguinRenderContext.profile(model);
         if(profile==null)return new Matrix4f();
         PoseStack stack=new PoseStack();
@@ -80,6 +83,9 @@ public final class PenguinHeadRenderer {
     
     /** Head-only native geometry bound, including noses, hats, horns and head children. */
     static float maxY(EntityModel<?> model,Matrix4f delta){
+        // Gecko death draws stay on the complete native renderer, so no canonical death bound is
+        // defined. Fail loudly instead of returning a made-up head bound.
+        if(model instanceof GeoMaidView)throw new IllegalArgumentException("Gecko death head bounds are not used");
         PenguinProportions.Profile profile=PenguinRenderContext.profile(model);
         if(profile==null)throw new IllegalArgumentException("Unsupported death head");
         if(MaidCompatClient.isMaidModel(model)){

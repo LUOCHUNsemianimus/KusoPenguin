@@ -21,6 +21,12 @@ public final class PenguinRenderContext {
     }
     private PenguinRenderContext(){}
     public static void setModel(PenguinBodyModel model){shared=model;}
+    /** Shared five-part body model used by the Gecko renderer's body entry point. */
+    public static PenguinBodyModel sharedModel(){return shared;}
+    /** Model proxy of the current draw, used by optional Gecko layer hooks. */
+    public static EntityModel<?> currentModel(){
+        Frame f=FRAMES.get().peek();return f==null?null:f.model;
+    }
     public static void push(LivingEntity entity,EntityModel<?> model,float partial){FRAMES.get().push(new Frame(entity,model,partial));}
     public static void pop(){ArrayDeque<Frame> frames=FRAMES.get();frames.pop();if(frames.isEmpty())FRAMES.remove();}
     static PenguinPlayerPosture posture(){
@@ -156,6 +162,26 @@ public final class PenguinRenderContext {
         if(p!=null){stack.mulPose(p.headDelta);return;}
         PenguinPlayerPosture posture=posture();
         if(posture!=null)posture.applyHead(stack);
+    }
+    /**
+     * Reapplies the complete canonical head transform in the native Gecko frame.
+     *
+     * <p>The native head/head-gear layer walks Gecko head locators, so the canonical
+     * {@code Delta * Tdrop} must be conjugated by C:
+     * {@code C * Delta * Tdrop * C^-1}. The drop is part of the transform because the main head
+     * pass also draws the native head under the same drop. The caller owns push/finally-pop.
+     */
+    public static void applyGeoHead(PoseStack stack){
+        Frame f=FRAMES.get().peek();
+        if(f==null)return;
+        PenguinProportions.Profile profile=profile(f.model);
+        float drop=profile==null?0:profile.headDropBlocks();
+        stack.scale(-1,-1,1);
+        stack.translate(0,-1.5F,0);
+        applyHead(stack);
+        stack.translate(0,drop,0);
+        stack.translate(0,1.5F,0);
+        stack.scale(-1,-1,1);
     }
     /**
      * Replaces the vanilla humanoid hand frame with the current penguin wing end. Returns false

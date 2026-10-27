@@ -1,5 +1,6 @@
 package com.luochun.kusopenguin.client;
 
+import com.luochun.kusopenguin.client.compat.GeoMaidView;
 import com.luochun.kusopenguin.client.compat.MaidCompatClient;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.HumanoidModel;
@@ -21,6 +22,11 @@ public final class PenguinProportions {
     private PenguinProportions() {}
 
     public static Profile forModel(EntityModel<?> model) {
+        // Optional Gecko maid proxy: profile is derived from the native bind head pivot, not from
+        // animated bounds. A missing head returns null and keeps the complete native renderer.
+        if (model instanceof GeoMaidView view) {
+            return view.kusoPenguin$profile();
+        }
         // These two inherit HumanoidModel but have different head/floor geometry.
         // Enderman legs end at Y=25, one pixel below the actual renderer ground plane.
         // Anchor our short feet at Y=24 so they remain visible above the terrain.
