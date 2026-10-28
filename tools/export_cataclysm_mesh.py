@@ -1,6 +1,6 @@
-"""Export the independent Ignis floating-body pilot; never writes the ordinary penguin assets.
+"""Export Ignis cuffs combined with the unmodified original fat body and connected feet.
 
-Editable source is ring geometry, not borrowed Cataclysm assets. Each face is one palette colour.
+Editable sleeve source is ring geometry, not borrowed Cataclysm assets; body/feet reuse HIGH.
 --check verifies both reproducibility and watertight, outward, non-degenerate topology.
 """
 from pathlib import Path
@@ -20,7 +20,6 @@ def build(data):
     count = data['sectors']
     parts = []
     for name, pivot, rings, joint in [
-        ('body', [0, 0, 0], data['body_rings'], 1),
         ('right_wing', [5.45, 2.6, .2], data['sleeve_rings'], 4),
         ('left_wing', [-5.45, 2.6, .2], data['sleeve_rings'], 7),
     ]:
@@ -52,9 +51,7 @@ def build(data):
             if length < 1e-8:
                 raise ValueError('Degenerate face')
             normal = [x/length for x in n]
-            cream = (name == 'body' and min(v[1] for v in (a,b,c)) >= data['cream_from_y']
-                     and sum(v[2] for v in (a,b,c))/3 < data['cream_front_z'])
-            uv = data['cream_uv'] if cream else data['black_uv']
+            uv = data['black_uv']
             triangles.append([list(v)+uv+normal+[joint,joint,0] for v in (a,b,c)])
             for start, end in [(a,b),(b,c),(c,a)]:
                 edges[tuple(sorted((start,end)))] += 1
@@ -62,7 +59,14 @@ def build(data):
         if any(v != 2 for v in edges.values()) or volume <= 0:
             raise ValueError('Mesh must be closed and outward')
         parts.append({'name': name, 'pivot': pivot, 'triangles': triangles})
-    return {'schema': 2, 'parts': parts}
+    # User-approved fat body and connected legs are reused byte-for-value, including the real
+    # black/cream face boundaries and explicit leg weights. Only the old cuffs remain custom.
+    original = json.loads((ROOT / 'src/main/resources/assets/kuso_penguin/models/entity/penguin_lowpoly.json')
+                          .read_text(encoding='utf-8'))
+    retained = {p['name']: p for p in original['parts']}
+    cuffs = {p['name']: p for p in parts if p['name'].endswith('_wing')}
+    return {'schema': 2, 'parts': [retained['body'], cuffs['right_wing'], cuffs['left_wing'],
+                                  retained['right_foot'], retained['left_foot']]}
 
 
 def main():
@@ -77,7 +81,7 @@ def main():
     else:
         OUTPUT.parent.mkdir(parents=True, exist_ok=True)
         OUTPUT.write_bytes(encoded)
-    print('PASS Ignis closed mesh', {p['name']: len(p['triangles']) for p in data['parts']})
+    print('PASS Ignis original body/feet + closed cuffs', {p['name']: len(p['triangles']) for p in data['parts']})
 
 
 if __name__ == '__main__':

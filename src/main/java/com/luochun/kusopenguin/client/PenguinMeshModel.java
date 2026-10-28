@@ -121,7 +121,7 @@ public final class PenguinMeshModel {
         return loaded==null||!PenguinMeshPreview.isEnabled()?null:loaded.skins().get(PenguinMeshPreview.quality());
     }
 
-    /** Single pilot tier: separate closed, legless body and rigid sleeves, baked on reload only. */
+    /** Single pilot tier: original fat body/connected feet with custom cuffs, baked on reload. */
     public static PenguinSkinnedMesh ignisSkin(){
         Loaded loaded=cache;
         return loaded==null||!PenguinMeshPreview.isEnabled()?null:loaded.ignisSkin();
@@ -599,7 +599,7 @@ public final class PenguinMeshModel {
                 PenguinSkinnedMesh ignisSkin;
                 try(Reader reader=new InputStreamReader(ignisResource.open(),StandardCharsets.UTF_8)){
                     ignisSkin=PenguinSkinnedMesh.bake(parseParts(reader,
-                            Set.of("body","right_wing","left_wing")),clip);
+                            EXPECTED_PARTS),clip);
                 }
                 return new Loaded(Map.copyOf(parsed),Map.copyOf(skins),Map.copyOf(clips),ignisSkin);
             } catch (IOException | RuntimeException exception) {

@@ -10,4 +10,4 @@ Minecraft 1.21.1 / NeoForge 21.1.243 / Java 21，与 Huhutalk 相同工具链，
 
 灾变扩展调研（2026-10-28）：Ignis／Scylla／Ender Guardian／Netherite Monstrosity 的骨骼、实际 JAR 描述符、材质透明区域与分阶段方案见 `docs/CATACLYSM_BOSS_EXPANSION_RESEARCH.md`。**Scylla 视觉-only 替换已实现**（`docs/SCYLLA_COMPAT.md`，已通过开发环境动作／GPU／无灾变启动检查，待用户观感验收）；Ender Guardian／Netherite Monstrosity 仍未实现；Ignis 首版见下方更新，不要直接复用 Scylla 路径。工作区 `.workflow/projects/kuso-penguin/work/cataclysm-expansion-20261028/` 保留静态审计证据。后续先核对新 HEAD 与固定版本，再立新卡；不要直接把四者当作 Maledictus 的路径替换。
 
-Ignis 视觉试点（2026-10-28）：独立无脚悬浮企鹅身体＋短翼袖，保留完整原生长臂／拳套／剑盾和头；AdvancedModelBox 只读矩阵与祖先保留绘制见 `docs/IGNIS_COMPAT.md`。与 Scylla 一同等待用户实机观感验收。Ender Guardian／Netherite Monstrosity 仍未实现。不要把普通企鹅短腿、落地修正或 Kuso 自定义动作套到 Ignis。
+Ignis 视觉试点（2026-10-28）：原版胖企鹅身体／连接腿脚＋短翼袖，脚踝固定下垂，原生lowerbody2喷火保留，保留完整原生长臂／拳套／剑盾和头；AdvancedModelBox 只读矩阵与祖先保留绘制见 `docs/IGNIS_COMPAT.md`。与 Scylla 一同等待用户实机观感验收。Ender Guardian／Netherite Monstrosity 仍未实现。腿脚只随身体整体运动，不能采样原生腿动画；不要施加落地修正或 Kuso 自定义动作。

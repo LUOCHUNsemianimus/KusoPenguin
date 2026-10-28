@@ -254,3 +254,11 @@ outside this validation. Final artistic appearance awaits user acceptance.
 The base D*A*T(bind) expression applies to the shared body/leg mapping; Scylla's wings use its
 calibrated native bent frames. Native sockets and parts are never moved. All runtime tools are
 external QA probes and are not bundled. Gradle test is NO-SOURCE, not a behaviour test suite.
+
+## 用户反馈修正 / Free-arm visibility
+
+2026-10-28：常态右臂被较宽躯干遮挡。仅将原生右臂对应的企鹅空手翼三节沿chest向外偏移3.5×ALIGN_SCALE模型像素（约4.594）；使用chest旋转后的方向，避免转身时偏移方向错误。持锚左臂、所有原生骨骼、头／蛇饰／锚链与socket不动。右翼现在使用独立外移后的视觉端点，不再声称其端点等于原生空手腕位置。
+
+The anatomical right/free penguin wing is offset outward in chest space to clear the wider belly. The anchor arm and all native transforms/sockets remain unchanged.
+
+Shoulder correction (2026-10-28): the earlier three-joint outward shift detached the shoulder. Joint7 now retains its original body-aligned shoulder origin. Only elbow/wrist8/9 splay outward; continuous wing skin bridges the anchored root. The native model, anchor arm and sockets remain unchanged. This supersedes the earlier three-joint offset description.

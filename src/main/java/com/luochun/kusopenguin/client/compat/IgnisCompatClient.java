@@ -18,7 +18,7 @@ import net.neoforged.fml.ModList;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
-/** Optional Ignis3.33 visual pilot: floating body and proximal sleeves, native long arms retained. */
+/** Optional Ignis3.33 visual pilot: fat body, dangling feet, native jet and long armored arms. */
 public final class IgnisCompatClient {
     private static final String MODEL="com.github.L_Ender.cataclysm.client.model.entity.Ignis_Model";
     private static final String[] ROOT={"root"};
@@ -31,6 +31,7 @@ public final class IgnisCompatClient {
     private static final String[] RIGHT_ARM={"root","upperbody","right_arm_joint","right_arm"};
     private static final String[] SHIELD={"root","upperbody","left_arm_joint","left_arm",
             "left_hand","left_big_guantlet","shield_root"};
+    private static final String[] FLAME={"root","lowerbody","lowerbody2"};
 
     private IgnisCompatClient() {}
 
@@ -64,7 +65,7 @@ public final class IgnisCompatClient {
             PoseStack stack,VertexConsumer buffer,int light,int overlay,int color) {
         Profile profile=replacementProfile(entity,model);
         if(profile==null) return false;
-        profile.main.render(stack,buffer,light,overlay,color);
+        profile.armor.render(stack,buffer,light,overlay,color);
         return true;
     }
 
@@ -99,29 +100,41 @@ public final class IgnisCompatClient {
             if(!p.visible() || !p.usableScale()) return null;
         }
         NativeAdvancedRetainedGeometry main=NativeAdvancedRetainedGeometry.resolve(model,
+                HEAD,LEFT_ARM,RIGHT_ARM,FLAME);
+        NativeAdvancedRetainedGeometry armor=NativeAdvancedRetainedGeometry.resolve(model,
                 HEAD,LEFT_ARM,RIGHT_ARM);
         NativeAdvancedRetainedGeometry shield=NativeAdvancedRetainedGeometry.resolve(model,SHIELD);
-        if(main==null||shield==null) return null;
+        if(main==null||shield==null||armor==null) return null;
         Vector3f neck=head.initial().transformPosition(new Vector3f());
-        // Ignis is legless: native baseY19, not ground24. Independent body height18.5.
-        // Renderer scale remains outside; torso is centered, with a wider belly and short cuffs.
+        // Float above the ground: original fat body uniformly scaled, with room for downward-pointing toes.
+        // No grounding or native leg sampling. The unchanged lowerbody2 supplies animated fire.
         Matrix4f alignment=new Matrix4f().translation(0,neck.y,neck.z)
-                .scale(2.6F,(19-neck.y)/18.5F,2.0F);
-        return new Profile(body,left,right,alignment,main,shield);
+                .scale(1.55F);
+        return new Profile(body,left,right,alignment,main,shield,armor);
     }
 
     private record Profile(NativeAdvancedBoxRig.Path body,NativeAdvancedBoxRig.Path left,
                            NativeAdvancedBoxRig.Path right,Matrix4f alignment,
-                           NativeAdvancedRetainedGeometry main,NativeAdvancedRetainedGeometry shield) {
+                           NativeAdvancedRetainedGeometry main,NativeAdvancedRetainedGeometry shield,
+                           NativeAdvancedRetainedGeometry armor) {
         Matrix4f[] world(PenguinAnimationClip bind) {
             Matrix4f delta=body.current().mul(body.initial().invert());
             Matrix4f bodySkin=delta.mul(new Matrix4f(alignment));
             Matrix4f[] world=new Matrix4f[PenguinRig.COUNT];
             for(int i=0;i<world.length;i++) world[i]=new Matrix4f(bodySkin).translate(bind.bind(i));
+            // Fixed ankle pitch, not an animation channel. Hip/knee and welded belly vertices
+            // follow the body, so feet remain connected while their toes dangle downward.
+            for(int i:new int[]{12,15}) {
+                Vector3f ankle=bind.bind(i);
+                world[i]=new Matrix4f(bodySkin).translate(ankle)
+                        .rotateX((float)Math.toRadians(60)).translate(-ankle.x,-ankle.y,-ankle.z)
+                        .translate(bind.bind(i));
+            }
             // Rigid cuffs are authored relative to their fixed wing pivots. Absolute arm frames
             // cancel those pivots through inverseBind, following native pre-bend with no stretch.
-            Matrix4f plus=left.current().scale(1.15F);
-            Matrix4f minus=right.current().scale(1.15F);
+            // A2px inward cuff overlap closes the gap to the unchanged narrow penguin shoulders.
+            Matrix4f plus=left.current().translate(-2.0F,0,0).scale(1.8F,1.15F,1.15F);
+            Matrix4f minus=right.current().translate(2.0F,0,0).scale(1.8F,1.15F,1.15F);
             for(int i=4;i<=6;i++) world[i]=new Matrix4f(plus);
             for(int i=7;i<=9;i++) world[i]=new Matrix4f(minus);
             return world;

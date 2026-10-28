@@ -287,7 +287,7 @@ public final class ScyllaCompatClient {
         if (main == null || snake == null || eye == null) {
             return null;
         }
-        return new Profile(rig, main, snake, eye, lArm, lArm2, anchor, rArm, rArm2);
+        return new Profile(rig, main, snake, eye, lArm, lArm2, anchor, rArm, rArm2, chest);
     }
 
     private static Matrix4f alignment() {
@@ -305,7 +305,8 @@ public final class ScyllaCompatClient {
                            NativeModelPartRig.JointPath leftForearm,
                            NativeModelPartRig.JointPath anchor,
                            NativeModelPartRig.JointPath rightArm,
-                           NativeModelPartRig.JointPath rightForearm) {
+                           NativeModelPartRig.JointPath rightForearm,
+                           NativeModelPartRig.JointPath chest) {
         private Matrix4f[] world(PenguinAnimationClip bind) {
             Matrix4f[] frames = rig.world(bind);
             // Scylla's bind arms already bend forward to hold the anchor. Delta-only retargeting
@@ -322,6 +323,14 @@ public final class ScyllaCompatClient {
             frames[8] = rightForearm.current().scale(ALIGN_SCALE);
             frames[9] = rightForearm.current().translate(0.0F, 8.0F, 0.0F)
                     .scale(ALIGN_SCALE);
+            // The free anatomical right arm was inside the wider penguin belly. Move only its
+            // forearm/tip along the chest axis. Keep the shoulder root body-anchored so the
+            // upper wing bridges into the belly instead of detaching; native sockets stay put.
+            Vector3f outward = chest.current().transformDirection(
+                    new Vector3f(-3.5F * ALIGN_SCALE, 0.0F, 0.0F));
+            for (int i = 8; i <= 9; i++) {
+                frames[i].translateLocal(outward.x, outward.y, outward.z);
+            }
             // Anchor visibility/scale belongs to the weapon mesh, not to a disappearing wrist.
             // No native part, global clip bind, or Maledictus frame is changed here.
             return frames;
