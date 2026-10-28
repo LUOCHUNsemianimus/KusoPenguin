@@ -20,8 +20,12 @@ public final class PenguinSkinnedMesh {
     }
     public int vertexCount(){return faces.length*4;}
     public static PenguinSkinnedMesh bake(PenguinMeshModel mesh,PenguinAnimationClip clip){
+        return bake(mesh.animationParts(),clip);
+    }
+    /** Independently validated native-boss variants may omit unused animation roots. */
+    public static PenguinSkinnedMesh bake(List<PenguinMeshModel.Part> parts,PenguinAnimationClip clip){
         Builder b=new Builder(clip);
-        for(PenguinMeshModel.Part part:mesh.animationParts()){
+        for(PenguinMeshModel.Part part:parts){
             int joint=switch(part.name()){
                 case "body"->PenguinRig.PELVIS;case "right_wing"->4;case "left_wing"->7;
                 case "right_foot"->10;case "left_foot"->13;default->throw new IllegalArgumentException("Unknown mesh root");};

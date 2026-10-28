@@ -6,6 +6,7 @@ import com.luochun.kusopenguin.client.PenguinRenderSupport;
 import com.luochun.kusopenguin.client.PenguinRenderContext;
 import com.luochun.kusopenguin.client.compat.MaidCompatClient;
 import com.luochun.kusopenguin.client.compat.MaledictusCompatClient;
+import com.luochun.kusopenguin.client.compat.IgnisCompatClient;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -57,6 +58,10 @@ public abstract class LivingEntityRendererMixin {
         // Visual-only Cataclysm boss branch. It is independent of shouldReplace so the boss never
         // enters Kuso action/death/dance state; a false result keeps the complete native draw.
         if (MaledictusCompatClient.renderNativePass(entity, model, poseStack, buffer,
+                packedLight, packedOverlay, color, originalBuffer)) {
+            return;
+        }
+        if (IgnisCompatClient.renderNativePass(entity, model, poseStack, buffer,
                 packedLight, packedOverlay, color, originalBuffer)) {
             return;
         }

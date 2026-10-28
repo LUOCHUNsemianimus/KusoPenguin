@@ -7,3 +7,7 @@ Minecraft 1.21.1 / NeoForge 21.1.243 / Java 21，与 Huhutalk 相同工具链，
 
 腿部连续模型：BB 源与 `models/prototypes/penguin_leg_bindings.json` 同步维护，使用 `tools/export_penguin_mesh.py` 导出（`--check` 只读核验）。权重保存在 sidecar，勿靠 BB 未知自定义字段。三档修改前副本在 `models/archive/leg-connection-20261027/`；legacy cube 不维护。
 短腿变形维护：玩家与可选 Boss 的腿经共享 `PenguinLegPose` 使用虚拟解剖控制点 `20/21.3/22.3`（模型像素，Y 向下，向下靠近羽毛腿根），补偿重绑定到不可变原 clip bind `15/20.5/22.3`；不要为修腿改关键帧或 rig bind。显式权重网格的蹲下只用一次带符号整机落地修正（body、双翼、双脚、头部同一量），勿恢复分件独立抬升；schema 1 与非接地/空中姿态保持原逻辑。修复前模型与 sidecar 副本在 `models/archive/leg-deformation-20261028/`，旧 `leg-connection-20261027` 历史保留。保留五动画根、原版常态、legacy 与工作流编译/验收规则。
+
+灾变扩展调研（2026-10-28）：Ignis／Scylla／Ender Guardian／Netherite Monstrosity 的骨骼、实际 JAR 描述符、材质透明区域与分阶段方案见 `docs/CATACLYSM_BOSS_EXPANSION_RESEARCH.md`。**Scylla 视觉-only 替换已实现**（`docs/SCYLLA_COMPAT.md`，已通过开发环境动作／GPU／无灾变启动检查，待用户观感验收）；Ender Guardian／Netherite Monstrosity 仍未实现；Ignis 首版见下方更新，不要直接复用 Scylla 路径。工作区 `.workflow/projects/kuso-penguin/work/cataclysm-expansion-20261028/` 保留静态审计证据。后续先核对新 HEAD 与固定版本，再立新卡；不要直接把四者当作 Maledictus 的路径替换。
+
+Ignis 视觉试点（2026-10-28）：独立无脚悬浮企鹅身体＋短翼袖，保留完整原生长臂／拳套／剑盾和头；AdvancedModelBox 只读矩阵与祖先保留绘制见 `docs/IGNIS_COMPAT.md`。与 Scylla 一同等待用户实机观感验收。Ender Guardian／Netherite Monstrosity 仍未实现。不要把普通企鹅短腿、落地修正或 Kuso 自定义动作套到 Ignis。

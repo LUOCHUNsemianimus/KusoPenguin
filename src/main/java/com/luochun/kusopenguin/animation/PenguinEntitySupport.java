@@ -25,6 +25,14 @@ public final class PenguinEntitySupport {
      */
     private static final ResourceLocation MALEDICTUS_ID =
             ResourceLocation.fromNamespaceAndPath("cataclysm", "maledictus");
+    /**
+     * Exact visual-only Scylla id. Like Maledictus it stays outside both action sets; the native
+     * renderer/AI/death/sockets remain in charge and only the body pass is replaced.
+     */
+    private static final ResourceLocation SCYLLA_ID =
+            ResourceLocation.fromNamespaceAndPath("cataclysm", "scylla");
+    private static final ResourceLocation IGNIS_ID =
+            ResourceLocation.fromNamespaceAndPath("cataclysm", "ignis");
     private static final Set<EntityType<?>> SUPPORTED_TYPES = Set.of(
             EntityType.PLAYER,
             EntityType.SKELETON,
@@ -60,8 +68,26 @@ public final class PenguinEntitySupport {
      * Cataclysm class and is deliberately separate from both {@link #isSupportedType} and
      * {@link #isProneType}, so no Kuso action/death/dance eligibility is widened.
      */
-    public static boolean isNativeAnimatedBoss(EntityType<?> type) {
+    public static boolean isMaledictus(EntityType<?> type) {
         return type != null && MALEDICTUS_ID.equals(BuiltInRegistries.ENTITY_TYPE.getKey(type));
+    }
+
+    /** Exact optional Scylla id, kept separate from the action/prone allowlists. */
+    public static boolean isScylla(EntityType<?> type) {
+        return type != null && SCYLLA_ID.equals(BuiltInRegistries.ENTITY_TYPE.getKey(type));
+    }
+
+    /** Exact floating visual-only boss; never widens action or prone eligibility. */
+    public static boolean isIgnis(EntityType<?> type) {
+        return type != null && IGNIS_ID.equals(BuiltInRegistries.ENTITY_TYPE.getKey(type));
+    }
+
+    /**
+     * Union used by action exclusion and boss diagnostics. Each bridge gates on its own exact
+     * model class, so this union cannot make one boss accept the other's model.
+     */
+    public static boolean isNativeAnimatedBoss(EntityType<?> type) {
+        return isMaledictus(type) || isScylla(type) || isIgnis(type);
     }
 
     /** Render-only prone contract. These types are intentionally absent from the set above. */

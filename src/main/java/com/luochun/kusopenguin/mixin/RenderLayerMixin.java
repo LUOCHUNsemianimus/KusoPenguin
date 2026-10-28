@@ -2,6 +2,7 @@ package com.luochun.kusopenguin.mixin;
 
 import com.luochun.kusopenguin.client.PenguinHeadRenderer;
 import com.luochun.kusopenguin.client.PenguinRenderSupport;
+import com.luochun.kusopenguin.client.compat.IgnisCompatClient;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.model.EntityModel;
@@ -31,6 +32,10 @@ public abstract class RenderLayerMixin {
                                                         MultiBufferSource originalBuffer,
                                                         int originalLight, LivingEntity entity,
                                                         int originalColor) {
+        if (IgnisCompatClient.renderArmorPass(entity,model,poseStack,buffer,packedLight,
+                packedOverlay,color)) {
+            return;
+        }
         if (PenguinRenderSupport.shouldReplace(entity)
                 && PenguinHeadRenderer.renderHead(model, poseStack, buffer, packedLight,
                 packedOverlay, color)) {

@@ -195,3 +195,10 @@ The following actual results are recorded outside the repository under
   coverage. Separately, `absence.txt` confirms an actual title-screen startup without
   Cataclysm, Lionfish, Iron or Gecko4 (TLM/YSM remain): mesh resources load, and both
   native/ghost compatibility entry points safely decline replacement.
+
+
+## Scylla 共享提取回归 / Shared-rig regression
+
+2026-10-28：祖先矩阵／rest 路径与保留件绘制提取为 `NativeModelPartRig` / `NativeRetainedGeometry`，Maledictus 的路径、对齐、层与短腿处理保持原样。新构建完成 180 项原有动作／武器／抓取乘客／原生回退采样。Scylla 的前屈翼标定仅位于 `ScyllaCompatClient`，不进入 Maledictus。详见 `SCYLLA_COMPAT.md`。
+
+The shared helper extraction passed 180 existing Maledictus render regressions. Scylla-only wing calibration does not affect this boss.

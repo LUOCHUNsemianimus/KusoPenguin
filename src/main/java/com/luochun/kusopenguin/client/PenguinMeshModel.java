@@ -63,7 +63,8 @@ public final class PenguinMeshModel {
     private static final ReloadListener RELOAD_LISTENER = new ReloadListener();
     private record Loaded(Map<PenguinMeshPreview.Quality,PenguinMeshModel> meshes,
                           Map<PenguinMeshPreview.Quality,PenguinSkinnedMesh> skins,
-                          Map<PenguinAction,PenguinAnimationClip> clips) {}
+                          Map<PenguinAction,PenguinAnimationClip> clips,
+                          PenguinSkinnedMesh ignisSkin) {}
     private static volatile Loaded cache;
 
     private final Part body;
@@ -118,6 +119,12 @@ public final class PenguinMeshModel {
     public static PenguinSkinnedMesh currentSkin(){
         Loaded loaded=cache;
         return loaded==null||!PenguinMeshPreview.isEnabled()?null:loaded.skins().get(PenguinMeshPreview.quality());
+    }
+
+    /** Single pilot tier: separate closed, legless body and rigid sleeves, baked on reload only. */
+    public static PenguinSkinnedMesh ignisSkin(){
+        Loaded loaded=cache;
+        return loaded==null||!PenguinMeshPreview.isEnabled()?null:loaded.ignisSkin();
     }
 
     /**
@@ -278,6 +285,19 @@ public final class PenguinMeshModel {
     }
 
     private static PenguinMeshModel parse(Reader reader) throws IOException {
+        List<Part> parsedParts = parseParts(reader, EXPECTED_PARTS);
+        Part body = find(parsedParts, "body");
+        Part rightWing = find(parsedParts, "right_wing");
+        Part leftWing = find(parsedParts, "left_wing");
+        Part rightFoot = find(parsedParts, "right_foot");
+        Part leftFoot = find(parsedParts, "left_foot");
+        boolean hasExplicitBindings = parsedParts.stream().flatMap(p -> p.triangles().stream())
+                .anyMatch(t -> t.a().binding() != null);
+        return new PenguinMeshModel(body,rightWing,leftWing,rightFoot,leftFoot,hasExplicitBindings);
+    }
+
+    /** Same strict schema/pivot/face checks, with an explicit root contract per asset. */
+    private static List<Part> parseParts(Reader reader, Set<String> expectedParts) throws IOException {
         JsonElement rootElement;
         try {
             rootElement = JsonParser.parseReader(reader);
@@ -299,16 +319,16 @@ public final class PenguinMeshModel {
             throw new IOException("Penguin mesh parts must be an array");
         }
         JsonArray partsArray = partsElement.getAsJsonArray();
-        if (partsArray.size() != EXPECTED_PARTS.size()) {
+        if (partsArray.size() != expectedParts.size()) {
             throw new IOException("Penguin mesh must contain exactly "
-                    + EXPECTED_PARTS.size() + " parts, found " + partsArray.size());
+                    + expectedParts.size() + " parts, found " + partsArray.size());
         }
 
         List<Part> parsedParts = new ArrayList<>(partsArray.size());
         Set<String> names = new HashSet<>();
         for (int i = 0; i < partsArray.size(); i++) {
             Part part = parsePart(partsArray.get(i), "parts[" + i + "]", explicitAllowed);
-            if (!EXPECTED_PARTS.contains(part.name())) {
+            if (!expectedParts.contains(part.name())) {
                 throw new IOException("parts[" + i + "] has unknown name '" + part.name() + "'");
             }
             if (!names.add(part.name())) {
@@ -316,30 +336,11 @@ public final class PenguinMeshModel {
             }
             parsedParts.add(part);
         }
-        if (!names.equals(EXPECTED_PARTS)) {
-            throw new IOException("Penguin mesh is missing required parts: " + EXPECTED_PARTS
+        if (!names.equals(expectedParts)) {
+            throw new IOException("Penguin mesh is missing required parts: " + expectedParts
                     + " (found " + names + ")");
         }
-
-        Part body = find(parsedParts, "body");
-        Part rightWing = find(parsedParts, "right_wing");
-        Part leftWing = find(parsedParts, "left_wing");
-        Part rightFoot = find(parsedParts, "right_foot");
-        Part leftFoot = find(parsedParts, "left_foot");
-        boolean hasExplicitBindings = false;
-        for (Part part : parsedParts) {
-            for (Triangle triangle : part.triangles()) {
-                if (triangle.a().binding() != null) {
-                    hasExplicitBindings = true;
-                    break;
-                }
-            }
-            if (hasExplicitBindings) {
-                break;
-            }
-        }
-        return new PenguinMeshModel(body, rightWing, leftWing, rightFoot, leftFoot,
-                hasExplicitBindings);
+        return List.copyOf(parsedParts);
     }
 
     private static Part find(List<Part> parts, String name) throws IOException {
@@ -592,7 +593,15 @@ public final class PenguinMeshModel {
                 }
                 Map<PenguinMeshPreview.Quality,PenguinSkinnedMesh> skins=new EnumMap<>(PenguinMeshPreview.Quality.class);
                 for(var entry:parsed.entrySet())skins.put(entry.getKey(),PenguinSkinnedMesh.bake(entry.getValue(),clip));
-                return new Loaded(Map.copyOf(parsed),Map.copyOf(skins),Map.copyOf(clips));
+                ResourceLocation ignisLocation=meshResource("cataclysm/ignis_legless.json");
+                Resource ignisResource=resourceManager.getResource(ignisLocation)
+                        .orElseThrow(()->new IOException("Missing resource "+ignisLocation));
+                PenguinSkinnedMesh ignisSkin;
+                try(Reader reader=new InputStreamReader(ignisResource.open(),StandardCharsets.UTF_8)){
+                    ignisSkin=PenguinSkinnedMesh.bake(parseParts(reader,
+                            Set.of("body","right_wing","left_wing")),clip);
+                }
+                return new Loaded(Map.copyOf(parsed),Map.copyOf(skins),Map.copyOf(clips),ignisSkin);
             } catch (IOException | RuntimeException exception) {
                 LOGGER.error("Failed to load experimental penguin mesh tiers {}", MODELS.values(),
                         exception);

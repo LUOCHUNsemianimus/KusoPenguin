@@ -11,12 +11,9 @@ import com.luochun.kusopenguin.client.PenguinSkinnedMesh;
 import com.luochun.kusopenguin.registry.ModEffects;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import java.util.ArrayList;
-import java.util.List;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.HierarchicalModel;
 import net.minecraft.client.model.geom.ModelPart;
-import net.minecraft.client.model.geom.PartPose;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.world.entity.LivingEntity;
@@ -34,7 +31,9 @@ import org.joml.Matrix4f;
  * <p>Coordinate convention: {@link ModelPart} positions and the penguin bind are in model pixels
  * with native Y pointing down, ground at Y=24. The per-joint world matrices are in that same native
  * pixel space. The penguin skin's own {@code /16} conversion stays in
- * {@link PenguinSkinnedMesh#render}.
+ * {@link PenguinSkinnedMesh#render}. The matrix/path/retained-terminal mechanics now live in
+ * {@link NativeModelPartRig} and {@link NativeRetainedGeometry}; this class only owns the
+ * Maledictus-specific paths, alignment and retained list.
  */
 public final class MaledictusCompatClient {
     private static final String MOD_ID = "cataclysm";
@@ -48,7 +47,39 @@ public final class MaledictusCompatClient {
     private static final float BIND_BODY_HEIGHT = 24.0F;
     /** Maps the 24-pixel penguin bind body onto the native ground-to-neck span. */
     private static final float ALIGN_SCALE = (GROUND_Y - NECK_Y) / BIND_BODY_HEIGHT;
-    private static final float REST_EPSILON = 1.0E-4F;
+
+    private static final String[] ROOT = {"roots", "berserker"};
+    private static final String[] PELVIS = {"roots", "berserker", "pelvis"};
+    private static final String[] BODY = {"roots", "berserker", "pelvis", "body"};
+    private static final String[] HEAD = {"roots", "berserker", "pelvis", "body", "head"};
+    private static final String[] RIGHT_WING =
+            {"roots", "berserker", "pelvis", "body", "left_shoulder"};
+    private static final String[] RIGHT_WING_MID =
+            {"roots", "berserker", "pelvis", "body", "left_shoulder", "left_arm"};
+    private static final String[] RIGHT_WING_TIP =
+            {"roots", "berserker", "pelvis", "body", "left_shoulder", "left_arm",
+                    "left_front_arm"};
+    private static final String[] LEFT_WING =
+            {"roots", "berserker", "pelvis", "body", "right_shoulder"};
+    private static final String[] LEFT_WING_MID =
+            {"roots", "berserker", "pelvis", "body", "right_shoulder", "right_arm"};
+    private static final String[] LEFT_WING_TIP =
+            {"roots", "berserker", "pelvis", "body", "right_shoulder", "right_arm",
+                    "right_front_arm"};
+    private static final String[] RIGHT_LEG =
+            {"roots", "berserker", "legs", "left_leg"};
+    private static final String[] RIGHT_KNEE =
+            {"roots", "berserker", "legs", "left_leg", "left_front_leg"};
+    private static final String[] LEFT_LEG =
+            {"roots", "berserker", "legs", "right_leg"};
+    private static final String[] LEFT_KNEE =
+            {"roots", "berserker", "legs", "right_leg", "right_front_leg"};
+    private static final String[] RIGHT_MACE = NativeModelPartRig.append(LEFT_WING_TIP, "right_mace");
+    private static final String[] LEFT_MACE = NativeModelPartRig.append(RIGHT_WING_TIP, "left_mace");
+    private static final String[] BOW = NativeModelPartRig.append(LEFT_WING_TIP, "bow");
+    private static final String[] HALBERD = NativeModelPartRig.append(LEFT_WING_TIP, "halberd");
+    private static final String[] SPIRIT_LEFT_WING = NativeModelPartRig.append(BODY, "left_wing");
+    private static final String[] SPIRIT_RIGHT_WING = NativeModelPartRig.append(BODY, "right_wing");
 
     private MaledictusCompatClient() {
     }
@@ -61,8 +92,8 @@ public final class MaledictusCompatClient {
                                            PoseStack poseStack, VertexConsumer nativeBuffer,
                                            int packedLight, int packedOverlay, int color,
                                            MultiBufferSource bufferSource) {
-        NativeRig rig = replacementRig(entity, model);
-        if (rig == null) {
+        Profile profile = replacementProfile(entity, model);
+        if (profile == null) {
             return false;
         }
         PenguinAnimationClip bind = PenguinMeshModel.animationClip();
@@ -70,13 +101,13 @@ public final class MaledictusCompatClient {
         if (bind == null || skin == null) {
             return false;
         }
-        Matrix4f[] world = rig.world(bind);
+        Matrix4f[] world = profile.rig().world(bind);
         PenguinAnimationPose pose = PenguinRenderContext.fromNativeRig(
                 world, new Matrix4f(), bind);
         // The native consumer was acquired by LivingEntityRenderer before this hook. Finish it
         // BEFORE requesting a different render type: BufferSource may flush/reuse its builder,
         // making a retained reference to the previous native consumer invalid ("Not building!").
-        rig.renderRetained(poseStack, nativeBuffer, packedLight, packedOverlay, color);
+        profile.retained().render(poseStack, nativeBuffer, packedLight, packedOverlay, color);
         // Main pass owns the one and only penguin body draw. The ghost layer below only draws the
         // retained native head/weapons/spirit-wing geometry with its native ghost material.
         VertexConsumer penguinBuffer = bufferSource.getBuffer(
@@ -93,11 +124,11 @@ public final class MaledictusCompatClient {
     public static boolean renderGhostPass(LivingEntity entity, EntityModel<?> model,
                                           PoseStack poseStack, VertexConsumer ghostBuffer,
                                           int packedLight, int packedOverlay, int color) {
-        NativeRig rig = replacementRig(entity, model);
-        if (rig == null) {
+        Profile profile = replacementProfile(entity, model);
+        if (profile == null) {
             return false;
         }
-        rig.renderRetained(poseStack, ghostBuffer, packedLight, packedOverlay, color);
+        profile.retained().render(poseStack, ghostBuffer, packedLight, packedOverlay, color);
         return true;
     }
 
@@ -106,11 +137,11 @@ public final class MaledictusCompatClient {
      * {@code PenguinRenderSupport.shouldReplace}: the boss must never enter Kuso action/death/
      * dance state, while its native invisible/glowing/baby/spectator draws stay completely native.
      */
-    private static NativeRig replacementRig(LivingEntity entity, EntityModel<?> model) {
+    private static Profile replacementProfile(LivingEntity entity, EntityModel<?> model) {
         if (!ModList.get().isLoaded(MOD_ID)
                 || model == null
                 || !MODEL_CLASS.equals(model.getClass().getName())
-                || !PenguinEntitySupport.isNativeAnimatedBoss(entity.getType())
+                || !PenguinEntitySupport.isMaledictus(entity.getType())
                 || !entity.hasEffect(ModEffects.PENGUIN)
                 || entity.isBaby()
                 || entity.isInvisible()
@@ -121,241 +152,73 @@ public final class MaledictusCompatClient {
                 || PenguinMeshModel.animationClip() == null) {
             return null;
         }
-        return NativeRig.resolve(model);
+        return resolve(model);
     }
 
-    /**
-     * Immutable per-draw path metadata. ModelPart transforms are only read; no native part field,
-     * visibility flag or pose is mutated and no state survives the draw.
-     */
-    private record NativeRig(JointPath[] joints, List<JointPath> retained) {
-        private static final String[] ROOT = {"roots", "berserker"};
-        private static final String[] PELVIS = {"roots", "berserker", "pelvis"};
-        private static final String[] BODY = {"roots", "berserker", "pelvis", "body"};
-        private static final String[] HEAD =
-                {"roots", "berserker", "pelvis", "body", "head"};
-        private static final String[] RIGHT_WING =
-                {"roots", "berserker", "pelvis", "body", "left_shoulder"};
-        private static final String[] RIGHT_WING_MID =
-                {"roots", "berserker", "pelvis", "body", "left_shoulder", "left_arm"};
-        private static final String[] RIGHT_WING_TIP =
-                {"roots", "berserker", "pelvis", "body", "left_shoulder", "left_arm",
-                        "left_front_arm"};
-        private static final String[] LEFT_WING =
-                {"roots", "berserker", "pelvis", "body", "right_shoulder"};
-        private static final String[] LEFT_WING_MID =
-                {"roots", "berserker", "pelvis", "body", "right_shoulder", "right_arm"};
-        private static final String[] LEFT_WING_TIP =
-                {"roots", "berserker", "pelvis", "body", "right_shoulder", "right_arm",
-                        "right_front_arm"};
-        private static final String[] RIGHT_LEG =
-                {"roots", "berserker", "legs", "left_leg"};
-        private static final String[] RIGHT_KNEE =
-                {"roots", "berserker", "legs", "left_leg", "left_front_leg"};
-        private static final String[] LEFT_LEG =
-                {"roots", "berserker", "legs", "right_leg"};
-        private static final String[] LEFT_KNEE =
-                {"roots", "berserker", "legs", "right_leg", "right_front_leg"};
-        private static final String[] RIGHT_MACE = append(LEFT_WING_TIP, "right_mace");
-        private static final String[] LEFT_MACE = append(RIGHT_WING_TIP, "left_mace");
-        private static final String[] BOW = append(LEFT_WING_TIP, "bow");
-        private static final String[] HALBERD = append(LEFT_WING_TIP, "halberd");
-        private static final String[] SPIRIT_LEFT_WING = append(BODY, "left_wing");
-        private static final String[] SPIRIT_RIGHT_WING = append(BODY, "right_wing");
-
-        private static NativeRig resolve(EntityModel<?> model) {
-            if (!(model instanceof HierarchicalModel<?> hierarchical)) {
-                return null;
-            }
-            ModelPart root = hierarchical.root();
-            ModelPart roots = child(root, "roots");
-            ModelPart berserker = child(roots, "berserker");
-            ModelPart pelvis = child(berserker, "pelvis");
-            ModelPart body = child(pelvis, "body");
-            ModelPart head = child(body, "head");
-            if (roots == null || berserker == null || pelvis == null || body == null
-                    || head == null) {
-                return null;
-            }
-            // Pinned native bind anchors. A different model version must keep its complete native
-            // renderer instead of receiving the wrong penguin alignment.
-            if (!rest(roots, 0.0F, 24.0F, 0.0F)
-                    || !rest(berserker, 0.0F, -24.0F, -3.0F)
-                    || !rest(pelvis, 0.0F, 2.0F, 0.0F)
-                    || !rest(body, 0.0F, 1.6F, 3.6F)
-                    || !rest(head, 0.0F, -16.6F, -4.0F)) {
-                return null;
-            }
-
-            JointPath[] joints = new JointPath[PenguinRig.COUNT];
-            joints[PenguinRig.ROOT] = path(root, ROOT);
-            joints[PenguinRig.PELVIS] = path(root, PELVIS);
-            joints[PenguinRig.CHEST] = path(root, BODY);
-            joints[PenguinRig.HEAD] = path(root, HEAD);
-            // Historical penguin names use the opposite X side from the native anatomical names:
-            // positive-X penguin right_wing (root 4) follows native LEFT shoulder/arm/front_arm.
-            joints[4] = path(root, RIGHT_WING);
-            joints[5] = path(root, RIGHT_WING_MID);
-            joints[6] = path(root, RIGHT_WING_TIP);
-            joints[7] = path(root, LEFT_WING);
-            joints[8] = path(root, LEFT_WING_MID);
-            joints[9] = path(root, LEFT_WING_TIP);
-            // Same X-side convention for the legs. The native front_leg is the knee/foot chain;
-            // the pinned model has no separate foot bone, so knee and foot share that delta.
-            joints[10] = path(root, RIGHT_LEG);
-            joints[11] = path(root, RIGHT_KNEE);
-            joints[12] = joints[11];
-            joints[13] = path(root, LEFT_LEG);
-            joints[14] = path(root, LEFT_KNEE);
-            joints[15] = joints[14];
-            for (JointPath joint : joints) {
-                if (joint == null) {
-                    return null;
-                }
-            }
-
-            JointPath headPath = path(root, HEAD);
-            JointPath weaponRight = path(root, RIGHT_MACE);
-            JointPath weaponLeft = path(root, LEFT_MACE);
-            JointPath bow = path(root, BOW);
-            JointPath halberd = path(root, HALBERD);
-            JointPath spiritLeft = path(root, SPIRIT_LEFT_WING);
-            JointPath spiritRight = path(root, SPIRIT_RIGHT_WING);
-            if (headPath == null || weaponRight == null || weaponLeft == null || bow == null
-                    || halberd == null || spiritLeft == null || spiritRight == null) {
-                return null;
-            }
-            List<JointPath> retained = new ArrayList<>(7);
-            retained.add(headPath);
-            retained.add(weaponRight);
-            retained.add(weaponLeft);
-            retained.add(bow);
-            retained.add(halberd);
-            retained.add(spiritLeft);
-            retained.add(spiritRight);
-            return new NativeRig(joints, List.copyOf(retained));
+    private static Profile resolve(EntityModel<?> model) {
+        if (!(model instanceof HierarchicalModel<?> hierarchical)) {
+            return null;
+        }
+        ModelPart root = hierarchical.root();
+        ModelPart roots = NativeModelPartRig.child(root, "roots");
+        ModelPart berserker = NativeModelPartRig.child(roots, "berserker");
+        ModelPart pelvis = NativeModelPartRig.child(berserker, "pelvis");
+        ModelPart body = NativeModelPartRig.child(pelvis, "body");
+        ModelPart head = NativeModelPartRig.child(body, "head");
+        if (roots == null || berserker == null || pelvis == null || body == null
+                || head == null) {
+            return null;
+        }
+        // Pinned native bind anchors. A different model version must keep its complete native
+        // renderer instead of receiving the wrong penguin alignment.
+        if (!NativeModelPartRig.rest(roots, 0.0F, 24.0F, 0.0F)
+                || !NativeModelPartRig.rest(berserker, 0.0F, -24.0F, -3.0F)
+                || !NativeModelPartRig.rest(pelvis, 0.0F, 2.0F, 0.0F)
+                || !NativeModelPartRig.rest(body, 0.0F, 1.6F, 3.6F)
+                || !NativeModelPartRig.rest(head, 0.0F, -16.6F, -4.0F)) {
+            return null;
         }
 
-        private Matrix4f[] world(PenguinAnimationClip bind) {
-            Matrix4f[] world = new Matrix4f[PenguinRig.COUNT];
-            for (int i = 0; i < world.length; i++) {
-                Matrix4f delta = new Matrix4f(joints[i].current())
-                        .mul(new Matrix4f(joints[i].initial()).invert());
-                // Bind cancellation belongs to fromNativeRig: world = D * A * T(bind), therefore
-                // the fed pose's skin matrix is exactly D * A in native model pixels.
-                world[i] = delta.mul(alignment()).translate(bind.bind(i));
-            }
-            return world;
+        String[][] jointNames = new String[PenguinRig.COUNT][];
+        jointNames[PenguinRig.ROOT] = ROOT;
+        jointNames[PenguinRig.PELVIS] = PELVIS;
+        jointNames[PenguinRig.CHEST] = BODY;
+        jointNames[PenguinRig.HEAD] = HEAD;
+        // Historical penguin names use the opposite X side from the native anatomical names:
+        // positive-X penguin right_wing (root 4) follows native LEFT shoulder/arm/front_arm.
+        jointNames[4] = RIGHT_WING;
+        jointNames[5] = RIGHT_WING_MID;
+        jointNames[6] = RIGHT_WING_TIP;
+        jointNames[7] = LEFT_WING;
+        jointNames[8] = LEFT_WING_MID;
+        jointNames[9] = LEFT_WING_TIP;
+        // Same X-side convention for the legs. The native front_leg is the knee/foot chain;
+        // the pinned model has no separate foot bone, so knee and foot share that delta.
+        jointNames[10] = RIGHT_LEG;
+        jointNames[11] = RIGHT_KNEE;
+        jointNames[12] = RIGHT_KNEE;
+        jointNames[13] = LEFT_LEG;
+        jointNames[14] = LEFT_KNEE;
+        jointNames[15] = LEFT_KNEE;
+        NativeModelPartRig rig = NativeModelPartRig.create(root, jointNames, alignment());
+        if (rig == null) {
+            return null;
         }
-
-        /**
-         * Replays the retained native head+horn, currently visible weapons and spiritual back
-         * wings. The full ancestor chain is walked with {@code translateAndRotate}, and every
-         * ancestor's own visibility is respected. Rendering a terminal ModelPart keeps its native
-         * children, so horns, bow strings, halberd blades and wing2 all stay attached.
-         */
-        private void renderRetained(PoseStack poseStack, VertexConsumer buffer, int packedLight,
-                                    int packedOverlay, int color) {
-            for (JointPath path : retained) {
-                ModelPart[] chain = path.chain();
-                boolean visible = true;
-                for (ModelPart part : chain) {
-                    if (!part.visible) {
-                        visible = false;
-                        break;
-                    }
-                }
-                if (!visible) {
-                    continue;
-                }
-                poseStack.pushPose();
-                try {
-                    for (int i = 0; i < chain.length - 1; i++) {
-                        chain[i].translateAndRotate(poseStack);
-                    }
-                    chain[chain.length - 1].render(poseStack, buffer, packedLight, packedOverlay,
-                            color);
-                } finally {
-                    poseStack.popPose();
-                }
-            }
-        }
-
-        private static Matrix4f alignment() {
-            // Y is scaled around the native ground plane. The final Z translation puts penguin
-            // bind Z=0 on the retained native neck/body centreline; it is not a hand offset.
-            return new Matrix4f()
-                    .translation(0.0F, GROUND_Y, NECK_Z)
-                    .scale(ALIGN_SCALE, ALIGN_SCALE, ALIGN_SCALE)
-                    .translate(0.0F, -GROUND_Y, 0.0F);
-        }
-
-        private static JointPath path(ModelPart root, String[] names) {
-            List<ModelPart> chain = new ArrayList<>(names.length + 1);
-            chain.add(root);
-            ModelPart current = root;
-            for (String name : names) {
-                current = child(current, name);
-                if (current == null) {
-                    return null;
-                }
-                chain.add(current);
-            }
-            return new JointPath(chain.toArray(ModelPart[]::new));
-        }
-
-        private static ModelPart child(ModelPart parent, String name) {
-            return parent != null && parent.hasChild(name) ? parent.getChild(name) : null;
-        }
-
-        private static boolean rest(ModelPart part, float x, float y, float z) {
-            PartPose pose = part.getInitialPose();
-            return Math.abs(pose.x - x) <= REST_EPSILON
-                    && Math.abs(pose.y - y) <= REST_EPSILON
-                    && Math.abs(pose.z - z) <= REST_EPSILON;
-        }
-
-        private static String[] append(String[] path, String child) {
-            String[] result = new String[path.length + 1];
-            System.arraycopy(path, 0, result, 0, path.length);
-            result[path.length] = child;
-            return result;
-        }
+        NativeRetainedGeometry retained = NativeRetainedGeometry.resolve(root,
+                HEAD, RIGHT_MACE, LEFT_MACE, BOW, HALBERD, SPIRIT_LEFT_WING,
+                SPIRIT_RIGHT_WING);
+        return retained == null ? null : new Profile(rig, retained);
     }
 
-    /**
-     * Full root-to-terminal ancestor chain. Rest uses {@link ModelPart#getInitialPose()}; animated
-     * state uses the current translation, rotation and scale. Both are full pixel-space products,
-     * so {@code F * inverse(B)} includes every ancestor, not just a local Euler copy.
-     */
-    private record JointPath(ModelPart[] chain) {
-        private Matrix4f current() {
-            return chain(false);
-        }
+    private static Matrix4f alignment() {
+        // Y is scaled around the native ground plane. The final Z translation puts penguin
+        // bind Z=0 on the retained native neck/body centreline; it is not a hand offset.
+        return new Matrix4f()
+                .translation(0.0F, GROUND_Y, NECK_Z)
+                .scale(ALIGN_SCALE, ALIGN_SCALE, ALIGN_SCALE)
+                .translate(0.0F, -GROUND_Y, 0.0F);
+    }
 
-        private Matrix4f initial() {
-            return chain(true);
-        }
-
-        private Matrix4f chain(boolean initial) {
-            Matrix4f result = new Matrix4f();
-            for (ModelPart part : chain) {
-                result.mul(local(part, initial));
-            }
-            return result;
-        }
-
-        private static Matrix4f local(ModelPart part, boolean initial) {
-            if (initial) {
-                PartPose pose = part.getInitialPose();
-                return new Matrix4f()
-                        .translation(pose.x, pose.y, pose.z)
-                        .rotateZYX(pose.zRot, pose.yRot, pose.xRot);
-            }
-            return new Matrix4f()
-                    .translation(part.x, part.y, part.z)
-                    .rotateZYX(part.zRot, part.yRot, part.xRot)
-                    .scale(part.xScale, part.yScale, part.zScale);
-        }
+    private record Profile(NativeModelPartRig rig, NativeRetainedGeometry retained) {
     }
 }
