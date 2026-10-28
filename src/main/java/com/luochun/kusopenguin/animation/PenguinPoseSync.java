@@ -33,21 +33,51 @@ public final class PenguinPoseSync {
 
     /** Unified server state boundary for every action. */
     public static boolean start(LivingEntity entity,PenguinAction action){
+        return startSequence(entity,action)!=0L;
+    }
+
+    /**
+     * Starts a flying kick and returns its authoritative sequence, or 0 when rejected. A Flight
+     * stores this sequence so only this exact kick can later be cancelled by its owner.
+     */
+    static long startKick(LivingEntity entity){
+        return startSequence(entity,PenguinAction.FLYING_KICK);
+    }
+
+    /**
+     * Stops one exact, still-active FLYING_KICK. A stale sequence, a newer kick, TAUNT and DEATH
+     * are all left untouched. The kick cooldown is deliberately preserved.
+     */
+    static boolean cancelKick(LivingEntity entity,long sequence){
+        if(!(entity.level() instanceof ServerLevel level))return false;
+        State current=STATES.get(entity);
+        if(current==null||current.action()!=PenguinAction.FLYING_KICK
+            ||current.sequence()!=sequence)return false;
+        if(!current.activeAt(level.getGameTime())){STATES.remove(entity);return false;}
+        STATES.remove(entity);
+        // The stop packet carries a strictly higher sequence so clients accept it ahead of the
+        // start packet even when both arrive in the same connection flush.
+        State stopped=new State(PenguinAction.FLYING_KICK,SEQUENCE.incrementAndGet(),current.started());
+        PacketDistributor.sendToPlayersTrackingEntityAndSelf(entity,packet(entity,stopped,false));
+        return true;
+    }
+
+    private static long startSequence(LivingEntity entity,PenguinAction action){
         // Visual-only boss: never start taunt/kick/death state even when the effect tag allows the
         // potion. Effect broadcasting/removal remains the untouched native path.
-        if(PenguinEntitySupport.isNativeAnimatedBoss(entity.getType()))return false;
-        if(!(entity.level() instanceof ServerLevel level))return false;
-        if(!entity.hasEffect(ModEffects.PENGUIN))return false;
+        if(PenguinEntitySupport.isNativeAnimatedBoss(entity.getType()))return 0L;
+        if(!(entity.level() instanceof ServerLevel level))return 0L;
+        if(!entity.hasEffect(ModEffects.PENGUIN))return 0L;
         long now=level.getGameTime();
         State current=STATES.get(entity);
         if(current!=null&&!current.activeAt(now)){STATES.remove(entity);current=null;}
-        if(action==PenguinAction.FLYING_KICK&&onKickCooldown(entity,now))return false;
-        if(current!=null&&action.priority()<=current.action().priority())return false;
+        if(action==PenguinAction.FLYING_KICK&&onKickCooldown(entity,now))return 0L;
+        if(current!=null&&action.priority()<=current.action().priority())return 0L;
         State next=new State(action,SEQUENCE.incrementAndGet(),now);
         STATES.put(entity,next);
         if(action==PenguinAction.FLYING_KICK)KICK_COOLDOWNS.put(entity,now);
         PacketDistributor.sendToPlayersTrackingEntityAndSelf(entity,packet(entity,next,true));
-        return true;
+        return next.sequence();
     }
 
     public static void removed(LivingEntity entity){

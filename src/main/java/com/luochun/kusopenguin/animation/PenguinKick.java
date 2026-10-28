@@ -1,5 +1,6 @@
 package com.luochun.kusopenguin.animation;
 
+import com.google.common.collect.MapMaker;
 import com.luochun.kusopenguin.KusoPenguin;
 import com.luochun.kusopenguin.registry.ModEffects;
 import java.util.*;
@@ -32,16 +33,30 @@ public final class PenguinKick {
     private static final double ORIGIN_SLACK=2;
     /** Headroom beyond the largest approved per-tick step for the external-displacement check. */
     private static final double STEP_SLACK=.5;
-    private static final Map<LivingEntity,Flight> FLIGHTS=Collections.synchronizedMap(new WeakHashMap<>());
+    /** Position or velocity below this is treated as settled rather than a new external impulse. */
+    private static final double EXTERNAL_DISPLACEMENT_SQR=1.0E-4;
+    private static final double EXTERNAL_VELOCITY_SQR=1.0E-6;
+    // Weak keys compare by object identity here, which keeps the integrated server's ServerPlayer
+    // and the client's separate LocalPlayer (same numeric id) on their own Flight entries.
+    private static final Map<LivingEntity,Flight> FLIGHTS=new MapMaker().weakKeys().makeMap();
     private static final ThreadLocal<Mob> MOB_STRIKE=new ThreadLocal<>();
     private static final ThreadLocal<Player> ATTACKER=new ThreadLocal<>();
     private static final ThreadLocal<Boolean> HIT=ThreadLocal.withInitial(()->false);
     private static final class Flight {
         final Vec3 origin,dir; final double distance,height; final int started;
         final double originBoundSqr,maxStepSqr;
+        /** Identity of the PoseSync FLYING_KICK state that owns this flight. */
+        final long sequence;
         int step; boolean ended; final LivingEntity target; Vec3 previous; final Set<UUID> hit=new HashSet<>();
-        Flight(LivingEntity e,Vec3 origin,Vec3 dir,double distance,double height){
+        /** Position after the previous manual travel step; kept apart from previous (hit sweep). */
+        Vec3 lastTravelPosition;
+        /** Trajectory goal at the previous manual travel step. */
+        Vec3 lastTravelGoal;
+        Flight(LivingEntity e,Vec3 origin,Vec3 dir,double distance,double height,long sequence){
             this.origin=origin;this.previous=e.position();this.dir=dir;this.distance=distance;this.height=height;this.started=e.tickCount;this.target=e instanceof Mob mob?mob.getTarget():null;
+            this.sequence=sequence;
+            this.lastTravelPosition=e.position();
+            this.lastTravelGoal=origin;
             // Both safety bounds are derived from the server-approved distance so a legitimate
             // boosted kick is not aborted; unboosted values stay at the old 6 / 1.5 scale.
             double originBound=distance+ORIGIN_SLACK;
@@ -69,14 +84,17 @@ public final class PenguinKick {
             ||!PenguinEntitySupport.isSupportedType(e.getType())||!e.onGround()||e.isPassenger()
             ||e.isSwimming()||e.isFallFlying()||e.isSpectator()||e.isBaby()||active(e))return false;
         if(e instanceof Player p&&(!p.isSprinting()||p.isCrouching()))return false;
-        if(!PenguinPoseSync.start(e,PenguinAction.FLYING_KICK))return false;
+        long sequence=PenguinPoseSync.startKick(e);
+        if(sequence==0L)return false;
         Vec3 look=e instanceof Mob m&&m.getTarget()!=null?m.getTarget().position().subtract(e.position()):e.getLookAngle();Vec3 dir=new Vec3(look.x,0,look.z).normalize();
         double baseDistance=e instanceof Player?4:independentMob(e)?3:1.5,height=e instanceof Player?1:.75;
         double distance=baseDistance*speedScale(e);
-        FLIGHTS.put(e,new Flight(e,e.position(),dir,distance,height));
+        Flight flight=new Flight(e,e.position(),dir,distance,height,sequence);
+        FLIGHTS.put(e,flight);
+        // The confirmed start intentionally replaces ordinary pre-kick velocity.
+        e.setDeltaMovement(Vec3.ZERO);
         e.fallDistance=0;
-        if(e instanceof ServerPlayer p)PacketDistributor.sendToPlayer(p,new PenguinKickMotion(
-            e.level().dimension().location(),e.getX(),e.getY(),e.getZ(),dir.x,dir.z,distance));
+        if(e instanceof ServerPlayer p)PacketDistributor.sendToPlayer(p,startMotion(e,flight));
         return true;
     }
     /**
@@ -106,24 +124,111 @@ public final class PenguinKick {
         double scale=withoutSprint/baseline;
         return Double.isFinite(scale)?Math.max(0,scale):1;
     }
-    public static void startLocal(Player p,Vec3 origin,Vec3 direction,double distance){
-        if(p.level().isClientSide())FLIGHTS.put(p,new Flight(p,origin,direction,distance,1));
+    /**
+     * Client-side mirror of a confirmed server kick. The sequence must come from the start packet;
+     * there is no constructor or default that invents one.
+     */
+    public static void startLocal(Player p,Vec3 origin,Vec3 direction,double distance,long sequence){
+        if(!p.level().isClientSide()||!p.isLocalPlayer())return;
+        Flight old=FLIGHTS.get(p);
+        if(old!=null&&old.sequence>=sequence)return;
+        FLIGHTS.put(p,new Flight(p,origin,direction,distance,1,sequence));
+        p.setDeltaMovement(Vec3.ZERO);
+    }
+    /** Server-authoritative stop for the local mirror; never notifies the server back. */
+    public static void stopLocal(Player p,long sequence){
+        Flight f=FLIGHTS.get(p);
+        if(f==null||f.sequence!=sequence)return;
+        FLIGHTS.remove(p);
+        // The manual step already cleared its own velocity. Any remaining delta here can be a real
+        // incoming impulse (for example knockback), so the stop must not erase it.
+    }
+    /** The server only accepts a cancel for the sender's exact current flight. */
+    static void cancelFromClient(Player player,long sequence){
+        Flight f=FLIGHTS.get(player);
+        if(f==null||f.sequence!=sequence)return;
+        interruptFlight(player,f,false);
     }
     /** Called instead of ordinary travel only for the local player or a server-controlled mob. */
     public static boolean travel(LivingEntity e){
         Flight f=FLIGHTS.get(e);
         if(f==null||e instanceof ServerPlayer||e.level().isClientSide()&&!(e instanceof Player p&&p.isLocalPlayer()))return false;
-        if(!valid(e,f)||f.step>=TRAVEL_TICKS){FLIGHTS.remove(e);return false;}
+        // An impulse received between controlled steps owns the entity's motion now. Stop at once
+        // and keep that impulse instead of overwriting it with the next trajectory increment.
+        if(f.step>0&&externalImpulse(e,f)){interruptFlight(e,f,true);return false;}
+        if(!valid(e,f)){interruptFlight(e,f,false);return false;}
+        if(f.step>=TRAVEL_TICKS){completeTravel(e,f);return false;}
         double t=(++f.step)/(double)TRAVEL_TICKS;
-        Vec3 next=f.origin.add(f.dir.scale(f.distance*t)).add(0,4*f.height*t*(1-t),0);
-        Vec3 delta=next.subtract(e.position());
-        // A server-approved start never permits catch-up teleports after external displacement.
-        if(delta.lengthSqr()>f.maxStepSqr){FLIGHTS.remove(e);return false;}
+        Vec3 goal=trajectory(f,t);
+        // Incremental step from the previous goal, not absolute catch-up from the current position.
+        Vec3 delta=goal.subtract(f.lastTravelGoal);
+        if(delta.lengthSqr()>f.maxStepSqr){interruptFlight(e,f,true);return false;}
         e.setDeltaMovement(delta);e.move(MoverType.SELF,delta);e.fallDistance=0;
-        if(e.horizontalCollision||e.verticalCollision&&t<.5||f.step>=TRAVEL_TICKS){
-            f.ended=true;if(e.level().isClientSide())FLIGHTS.remove(e);e.setDeltaMovement(Vec3.ZERO);
+        f.lastTravelPosition=e.position();
+        f.lastTravelGoal=goal;
+        // Only the kick-owned velocity is cleared, so ordinary travel resumes without stale motion.
+        e.setDeltaMovement(Vec3.ZERO);
+        if(e.horizontalCollision||e.verticalCollision&&t<.5){
+            f.ended=true;
+            // A server mob keeps its flight through this post-tick so the collided sweep segment
+            // can still hit; the pose is cancelled now and tick() removes the flight afterwards.
+            interruptFlight(e,f,false,true);
+        }else if(f.step>=TRAVEL_TICKS){
+            f.ended=true;
+            completeTravel(e,f);
         }
         return true;
+    }
+    private static Vec3 trajectory(Flight f,double t){
+        return f.origin.add(f.dir.scale(f.distance*t)).add(0,4*f.height*t*(1-t),0);
+    }
+    /**
+     * We cleared the kick delta after the previous move. A local player with velocity here got a
+     * real external impulse; mobs may write AI intent before travel, so they use displacement only.
+     */
+    private static boolean externalImpulse(LivingEntity e,Flight f){
+        if(e.position().distanceToSqr(f.lastTravelPosition)>EXTERNAL_DISPLACEMENT_SQR)return true;
+        return e instanceof Player&&e.getDeltaMovement().lengthSqr()>EXTERNAL_VELOCITY_SQR;
+    }
+    /** Natural movement end keeps the cosmetic kick tail; interruption also cancels the pose. */
+    private static void completeTravel(LivingEntity e,Flight f){
+        if(FLIGHTS.get(e)!=f)return;
+        if(ownsTravel(e))e.setDeltaMovement(Vec3.ZERO);
+        // The server keeps a finished mob flight through this post-tick so the final swept hit is
+        // still processed; the removal below then provides the eventual hit-state cleanup.
+        if(e.level().isClientSide())FLIGHTS.remove(e);
+    }
+    /**
+     * Single interruption boundary: remove the owned flight, cancel the matching kick pose and
+     * sync a stop to the client that owns this motion. Genuine impulses are preserved.
+     */
+    private static void interruptFlight(LivingEntity e,Flight f,boolean preserveImpulse){
+        interruptFlight(e,f,preserveImpulse,false);
+    }
+    private static void interruptFlight(LivingEntity e,Flight f,boolean preserveImpulse,boolean keepForFinalSweep){
+        if(FLIGHTS.get(e)!=f)return;
+        boolean deferCleanup=keepForFinalSweep&&!e.level().isClientSide()&&!(e instanceof ServerPlayer);
+        if(!deferCleanup)FLIGHTS.remove(e);
+        if(!preserveImpulse&&ownsTravel(e))e.setDeltaMovement(Vec3.ZERO);
+        if(e.level().isClientSide()){
+            if(e instanceof Player p&&p.isLocalPlayer())
+                PacketDistributor.sendToServer(new PenguinKickCancel(f.sequence));
+            return;
+        }
+        PenguinPoseSync.cancelKick(e,f.sequence);
+        if(e instanceof ServerPlayer p)PacketDistributor.sendToPlayer(p,stopMotion(e,f.sequence));
+    }
+    /** Server players are client-authoritative; only the local mirror or a server mob moves here. */
+    private static boolean ownsTravel(LivingEntity e){
+        if(e.level().isClientSide())return e instanceof Player p&&p.isLocalPlayer();
+        return !(e instanceof ServerPlayer);
+    }
+    private static PenguinKickMotion startMotion(LivingEntity e,Flight f){
+        return new PenguinKickMotion(e.level().dimension().location(),f.sequence,true,
+            e.getX(),e.getY(),e.getZ(),f.dir.x,f.dir.z,f.distance);
+    }
+    private static PenguinKickMotion stopMotion(LivingEntity e,long sequence){
+        return new PenguinKickMotion(e.level().dimension().location(),sequence,false,0,0,0,0,0,0);
     }
     private static boolean valid(LivingEntity e,Flight f){
         return e.isAlive()&&!e.isRemoved()&&e.hasEffect(ModEffects.PENGUIN)&&!e.isPassenger()
@@ -156,15 +261,23 @@ public final class PenguinKick {
     @SubscribeEvent public static void tick(EntityTickEvent.Post event){
         if(!(event.getEntity() instanceof LivingEntity e))return;
         Flight f=FLIGHTS.get(e);if(f==null)return;
-        if(!valid(e,f)){FLIGHTS.remove(e);return;}
+        if(e.level().isClientSide()){
+            if(e instanceof Player p&&p.isLocalPlayer()&&!valid(e,f))interruptFlight(e,f,false);
+            return;
+        }
+        if(!valid(e,f)){interruptFlight(e,f,false);return;}
         
-        if(!e.level().isClientSide()&&e instanceof Mob mob){
+        if(e instanceof Mob mob){
             LivingEntity target=f.target;
             if(independentMob(mob)&&target!=null&&target==mob.getTarget()&&target.isAlive()
                 &&!f.hit.contains(target.getUUID())&&!mob.isAlliedTo(target)&&mob.hasLineOfSight(target)
                 &&mob.getBoundingBox().expandTowards(f.previous.subtract(mob.position())).inflate(.35,.15,.35).intersects(target.getBoundingBox())){
-                f.hit.add(target.getUUID());MOB_STRIKE.set(mob);
-                try{mob.doHurtTarget(target);}finally{MOB_STRIKE.remove();}
+                MOB_STRIKE.set(mob);
+                boolean hit;
+                try{hit=mob.doHurtTarget(target);}finally{MOB_STRIKE.remove();}
+                // A target in its invulnerability window stays unmarked and can be retried on a
+                // later active tick; a successful hurt is recorded at most once per kick.
+                if(hit)f.hit.add(target.getUUID());
             }
             f.previous=e.position();if(f.ended)FLIGHTS.remove(e);
         }
@@ -181,26 +294,40 @@ public final class PenguinKick {
                 Vec3 closest=f.previous.add(segment.scale(t));
                 double reach=.65+(e.getBbWidth()+target.getBbWidth())*.5;
                 if(target.position().subtract(closest).horizontalDistanceSqr()>reach*reach)continue;
-                f.hit.add(target.getUUID());attack(p,target,f.dir);
+                if(attack(p,target,f.dir))f.hit.add(target.getUUID());
             }
             f.previous=current;
             if(e.tickCount-f.started>=TRAVEL_TICKS+2)FLIGHTS.remove(e);
         }
     }
-    private static void attack(Player p,LivingEntity target,Vec3 dir){
+    /** Returns the real PlayerAttackMixin hurt result so callers only record confirmed hits. */
+    private static boolean attack(Player p,LivingEntity target,Vec3 dir){
         boolean sprint=p.isSprinting();float fall=p.fallDistance;
+        boolean hit;
         ATTACKER.set(p);HIT.set(false);
         try{
             p.setSprinting(false);p.fallDistance=0;p.attack(target);
-            boolean hit=HIT.get();
+            hit=HIT.get();
             // Vanilla adds 0.5 strength per knockback level. Apply level II once, after native hurt.
             ATTACKER.remove();if(hit){
                 var settings=PenguinKickSettings.get(((ServerLevel)p.level()).getServer()).values(p.getUUID());
                 if(settings.knockbackLevel()>0)target.knockback(settings.knockbackStrength(),-dir.x,-dir.z);
             }
         }finally{ATTACKER.remove();HIT.remove();p.setSprinting(sprint);p.fallDistance=fall;}
+        return hit;
     }
     @SubscribeEvent public static void sweep(SweepAttackEvent e){if(dispatching(e.getEntity()))e.setSweeping(false);}
     @SubscribeEvent public static void critical(CriticalHitEvent e){if(dispatching(e.getEntity())){e.setCriticalHit(false);e.setDamageMultiplier(1);}}
-    @SubscribeEvent public static void knockback(LivingKnockBackEvent e){if(ATTACKER.get()!=null)e.setStrength(0);}
+    @SubscribeEvent public static void knockback(LivingKnockBackEvent e){
+        Player attacker=ATTACKER.get();
+        LivingEntity target=e.getEntity();
+        // Keep suppressing the vanilla extra knockback applied to the victim of our custom kick.
+        if(attacker!=null&&target!=attacker){e.setStrength(0);return;}
+        // A positive knockback actually received by an active kicker ends the kick, but its
+        // impulse is left intact. Zero-strength events are not an interruption.
+        if(e.getStrength()>0){
+            Flight f=FLIGHTS.get(target);
+            if(f!=null)interruptFlight(target,f,true);
+        }
+    }
 }

@@ -28,7 +28,12 @@ public final class PenguinKickInput {
     public static boolean moving(){var p=Minecraft.getInstance().player;return p!=null&&PenguinKick.active(p);}
     public static void receive(PenguinKickMotion motion){
         var p=Minecraft.getInstance().player;
-        if(p!=null&&p.level().dimension().location().equals(motion.dimension()))
-            PenguinKick.startLocal(p,new Vec3(motion.x(),motion.y(),motion.z()),new Vec3(motion.dx(),0,motion.dz()),motion.distance());
+        if(p==null||!p.level().dimension().location().equals(motion.dimension()))return;
+        if(!motion.playing()){
+            PenguinKick.stopLocal(p,motion.sequence());
+            return;
+        }
+        PenguinKick.startLocal(p,new Vec3(motion.x(),motion.y(),motion.z()),
+            new Vec3(motion.dx(),0,motion.dz()),motion.distance(),motion.sequence());
     }
 }

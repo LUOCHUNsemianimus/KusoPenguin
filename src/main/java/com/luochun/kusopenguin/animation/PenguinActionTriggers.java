@@ -1,7 +1,5 @@
 package com.luochun.kusopenguin.animation;
 
-import com.luochun.kusopenguin.registry.ModEffects;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -17,11 +15,15 @@ public final class PenguinActionTriggers {
     private PenguinActionTriggers() {
     }
 
+    /**
+     * Legacy attack hook with no current caller. It must start a real kick through the same
+     * server-owned activation/cooldown path, never a pose-only FLYING_KICK.
+     */
     public static void playerHit(Player player, boolean wasSprinting, float attackStrength) {
         if (!wasSprinting || !(attackStrength > 0.9F)) {
             return;
         }
-        trigger(player, PenguinAction.FLYING_KICK);
+        PenguinKick.tryStart(player);
     }
 
     public static void mobHit(Mob mob, Entity target) {
@@ -35,15 +37,5 @@ public final class PenguinActionTriggers {
             return;
         }
         if(!PenguinKick.independentMob(mob))PenguinKick.tryStart(mob);
-    }
-
-    private static void trigger(LivingEntity entity, PenguinAction action) {
-        if (!(entity.level() instanceof ServerLevel)) {
-            return;
-        }
-        if (!entity.hasEffect(ModEffects.PENGUIN)) {
-            return;
-        }
-        PenguinPoseSync.start(entity, action);
     }
 }

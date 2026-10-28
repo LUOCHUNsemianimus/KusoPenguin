@@ -8,10 +8,12 @@
     "PlayerAttackMixin",
     "MobAttackMixin",
     "PenguinTravelMixin",
+    "PenguinContactPushMixin",
     "PenguinDeathMixin",
     "JukeboxMusicMixin",
     "MobDanceMixin",
-    "ServerPlayerRevivalMixin"
+    "ServerPlayerRevivalMixin",
+    "ServerPlayerPenguinEffectSyncMixin"
   ],
   "client": [
     "LivingEntityRendererMixin",
