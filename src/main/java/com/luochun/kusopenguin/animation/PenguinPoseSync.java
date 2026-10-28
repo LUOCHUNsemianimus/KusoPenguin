@@ -33,6 +33,9 @@ public final class PenguinPoseSync {
 
     /** Unified server state boundary for every action. */
     public static boolean start(LivingEntity entity,PenguinAction action){
+        // Visual-only boss: never start taunt/kick/death state even when the effect tag allows the
+        // potion. Effect broadcasting/removal remains the untouched native path.
+        if(PenguinEntitySupport.isNativeAnimatedBoss(entity.getType()))return false;
         if(!(entity.level() instanceof ServerLevel level))return false;
         if(!entity.hasEffect(ModEffects.PENGUIN))return false;
         long now=level.getGameTime();

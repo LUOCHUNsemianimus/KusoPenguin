@@ -15,6 +15,7 @@
   ],
   "client": [
     "LivingEntityRendererMixin",
+    "MaledictusLayerMixin",
     "RenderLayerMixin",
     "WolfCollarLayerMixin",
     "AgeableListModelAccessor",

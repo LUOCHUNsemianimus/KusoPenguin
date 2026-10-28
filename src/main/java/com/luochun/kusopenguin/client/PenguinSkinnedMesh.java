@@ -7,7 +7,8 @@ import org.joml.Vector3f;
 
 /** Resource-load topology/weight bake; only positions and flat normals change at draw time. */
 public final class PenguinSkinnedMesh {
-    private record Point(float x,float y,float z,int a,int b,float weight){}
+    /** Bind-space point in penguin model pixels plus its source animation-root tag. */
+    private record Point(float x,float y,float z,int a,int b,float weight,String part){}
     private record Face(int a,int b,int c,float u,float v){}
     private final Point[] points;
     private final Face[] faces;
@@ -30,6 +31,15 @@ public final class PenguinSkinnedMesh {
             else{float y=clip.bind(joint+1).y,z=clip.bind(joint+2).y;cuts=new float[]{y-.7f,y,y+.7f,z-.45f,z,z+.45f};}
             for(PenguinMeshModel.Triangle t:part.triangles()){
                 if(t.a().u()!=t.b().u()||t.a().u()!=t.c().u()||t.a().v()!=t.b().v()||t.a().v()!=t.c().v())throw new IllegalArgumentException("Animated penguin requires one solid colour per face");
+                PenguinMeshModel.Binding ba=t.a().binding(),bb=t.b().binding(),bc=t.c().binding();
+                if(ba!=null||bb!=null||bc!=null){
+                    // Schema 2 foot weights are authoritative: no automatic Y cuts or invented
+                    // influences. The loader already rejected partially bound triangles.
+                    if(ba==null||bb==null||bc==null)throw new IllegalArgumentException("Partially bound penguin triangle");
+                    b.face(position(t.a(),part),position(t.b(),part),position(t.c(),part),joint,
+                            part.name(),ba,bb,bc,t.a().u(),t.a().v());
+                    continue;
+                }
                 List<List<Vector3f>> polygons=new ArrayList<>();
                 polygons.add(List.of(position(t.a(),part),position(t.b(),part),position(t.c(),part)));
                 for(float plane:cuts){
@@ -42,7 +52,7 @@ public final class PenguinSkinnedMesh {
                     }
                     polygons=next;
                 }
-                for(List<Vector3f> poly:polygons)for(int i=1;i+1<poly.size();i++)b.face(poly.get(0),poly.get(i),poly.get(i+1),joint,t.a().u(),t.a().v());
+                for(List<Vector3f> poly:polygons)for(int i=1;i+1<poly.size();i++)b.face(poly.get(0),poly.get(i),poly.get(i+1),joint,part.name(),null,null,null,t.a().u(),t.a().v());
             }
         }
         return new PenguinSkinnedMesh(b.points.toArray(Point[]::new),b.faces.toArray(Face[]::new));
@@ -61,41 +71,80 @@ public final class PenguinSkinnedMesh {
     private static final class Builder {
         final PenguinAnimationClip clip;final List<Point> points=new ArrayList<>();final List<Face> faces=new ArrayList<>();final Map<Point,Integer> indices=new HashMap<>();
         Builder(PenguinAnimationClip clip){this.clip=clip;}
-        int point(Vector3f p,int root){
+        int point(Vector3f p,int root,String part,PenguinMeshModel.Binding binding){
             float x=Math.round(p.x*100000)/100000f,y=Math.round(p.y*100000)/100000f,z=Math.round(p.z*100000)/100000f;
-            int a=root,b=root;float weight=0;
-            if(root==PenguinRig.PELVIS){b=PenguinRig.CHEST;weight=smooth((17-y)/13);}
-            else{
-                float y1=clip.bind(root+1).y,y2=clip.bind(root+2).y;
-                float radius=root==4||root==7?1:.7f,second=root==4||root==7?1:.45f;
-                if(y<y1+radius){a=root;b=root+1;weight=smooth((y-y1+radius)/(2*radius));}
-                else{a=root+1;b=root+2;weight=smooth((y-y2+second)/(2*second));}
+            int a,b;float weight;
+            if(binding!=null){
+                a=binding.jointA();b=binding.jointB();weight=binding.weightB();
+            }else{
+                a=root;b=root;weight=0;
+                if(root==PenguinRig.PELVIS){b=PenguinRig.CHEST;weight=smooth((17-y)/13);}
+                else{
+                    float y1=clip.bind(root+1).y,y2=clip.bind(root+2).y;
+                    float radius=root==4||root==7?1:.7f,second=root==4||root==7?1:.45f;
+                    if(y<y1+radius){a=root;b=root+1;weight=smooth((y-y1+radius)/(2*radius));}
+                    else{a=root+1;b=root+2;weight=smooth((y-y2+second)/(2*second));}
+                }
             }
-            Point key=new Point(x,y,z,a,b,weight);Integer old=indices.get(key);if(old!=null)return old;
+            Point key=new Point(x,y,z,a,b,weight,part);Integer old=indices.get(key);if(old!=null)return old;
             int i=points.size();points.add(key);indices.put(key,i);return i;
         }
-        void face(Vector3f a,Vector3f b,Vector3f c,int root,float u,float v){
+        void face(Vector3f a,Vector3f b,Vector3f c,int root,String part,
+                  PenguinMeshModel.Binding ba,PenguinMeshModel.Binding bb,
+                  PenguinMeshModel.Binding bc,float u,float v){
             if(new Vector3f(b).sub(a).cross(new Vector3f(c).sub(a)).lengthSquared()<1e-10f)return;
-            faces.add(new Face(point(a,root),point(b,root),point(c,root),u,v));
+            faces.add(new Face(point(a,root,part,ba),point(b,root,part,bb),point(c,root,part,bc),u,v));
         }
     }
     
-    /** Exact deformed body bound for death-floor placement, using the same baked skin weights. */
-    float maxY(PenguinAnimationPose pose){
-        float max=Float.NEGATIVE_INFINITY;
-        Vector3f a=new Vector3f(),b=new Vector3f();
-        for(Point p:points){
-            a.set(p.x,p.y,p.z);b.set(a);pose.skin[p.a].transformPosition(a);pose.skin[p.b].transformPosition(b);
-            max=Math.max(max,a.y+(b.y-a.y)*p.weight);
-        }
-        return max;
-    }
-    public void render(PoseStack stack,VertexConsumer buffer,int light,int overlay,int color,PenguinAnimationPose pose){
+    /**
+     * Deforms every baked point with the same two-influence formula used by {@link #render}.
+     * Positions stay in penguin model pixels; callers convert to blocks with /16.
+     */
+    private void deform(PenguinAnimationPose pose){
         for(int i=0;i<points.length;i++){
             Point p=points[i];scratchA.set(p.x,p.y,p.z);scratchB.set(scratchA);
             pose.skin[p.a].transformPosition(scratchA);pose.skin[p.b].transformPosition(scratchB);
             transformed[i].set(scratchA).lerp(scratchB,p.weight);
         }
+    }
+    /** Exact deformed body bound for death-floor placement, using the same baked skin weights. */
+    float maxY(PenguinAnimationPose pose){
+        deform(pose);
+        float max=Float.NEGATIVE_INFINITY;
+        for(Vector3f p:transformed)max=Math.max(max,p.y);
+        return max;
+    }
+    /**
+     * Exact upper bound of the region controlled by a native part, in model pixels. The welded
+     * leg seams follow the pelvis, so the torso lift must include them while foot lifts must not.
+     */
+    float maxY(PenguinAnimationPose pose,String part){
+        deform(pose);
+        float max=Float.NEGATIVE_INFINITY;
+        for(int i=0;i<points.length;i++){
+            Point p=points[i];
+            boolean bodyPinned=(p.weight==1||bodyJoint(p.a))
+                    &&(p.weight==0||bodyJoint(p.b));
+            boolean included=part.equals("body")
+                    ?p.part.equals("body")||bodyPinned
+                    :p.part.equals(part)&&!bodyPinned;
+            if(included)max=Math.max(max,transformed[i].y);
+        }
+        return max;
+    }
+    private static boolean bodyJoint(int joint){
+        return joint==PenguinRig.PELVIS||joint==PenguinRig.CHEST;
+    }
+    /** Exact deformed {@code -Z} bound for prone floor placement, in model pixels. */
+    float maxNegZ(PenguinAnimationPose pose){
+        deform(pose);
+        float max=Float.NEGATIVE_INFINITY;
+        for(Vector3f p:transformed)max=Math.max(max,-p.z);
+        return max;
+    }
+    public void render(PoseStack stack,VertexConsumer buffer,int light,int overlay,int color,PenguinAnimationPose pose){
+        deform(pose);
         PoseStack.Pose matrix=stack.last();
         for(Face face:faces){
             Vector3f a=transformed[face.a],b=transformed[face.b],c=transformed[face.c];

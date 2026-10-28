@@ -113,8 +113,22 @@ public final class PenguinBodyLayer<T extends LivingEntity, M extends EntityMode
                                  PenguinMeshModel mesh) {
         PenguinAnimationPose animated = PenguinRenderContext.pose();
         if (mesh != null && animated != null) {
-            PenguinMeshModel.currentSkin().render(poseStack, vertexConsumer, packedLight,
-                    packedOverlay, -1, animated);
+            PenguinSkinnedMesh skin = PenguinMeshModel.skinFor(mesh);
+            if (skin == null) {
+                throw new IllegalStateException("Animated penguin mesh is missing its baked skin");
+            }
+            skin.render(poseStack, vertexConsumer, packedLight, packedOverlay, -1, animated);
+        } else if (mesh != null && mesh.hasExplicitBindings()) {
+            // Schema 2 outside action clips: keep the prepared five native roots and render the
+            // weighted skin with pelvis-pinned seam vertices, so ordinary walking/crouch/casting
+            // fade/prone cannot separate the authored leg seam from the torso.
+            PenguinSkinnedMesh skin = PenguinMeshModel.skinFor(mesh);
+            PenguinAnimationClip bind = PenguinMeshModel.animationClip();
+            if (skin == null || bind == null) {
+                throw new IllegalStateException("Weighted penguin mesh is missing its baked skin");
+            }
+            skin.render(poseStack, vertexConsumer, packedLight, packedOverlay, -1,
+                    PenguinAnimationPose.nativeBodyOnly(penguin, bind));
         } else if (mesh != null) {
             mesh.render(poseStack, vertexConsumer, packedLight, packedOverlay, -1, penguin);
         } else {

@@ -20,6 +20,8 @@ public final class PenguinAnimationPose {
         child(clip,sample,2);child(clip,sample,3);
         wing(clip,sample,4,nativeParts.rightWing());wing(clip,sample,7,nativeParts.leftWing());
         leg(clip,sample,10,nativeParts.rightFoot(),action);leg(clip,sample,13,nativeParts.leftFoot(),action);
+        // One anatomical leg rebind for every action pose, before any skin matrix is derived.
+        PenguinLegPose.apply(world,clip);
         for(int i=0;i<skin.length;i++)skin[i]=new Matrix4f(world[i]).translate(clip.bind(i).negate());
         PenguinProportions.Profile profile=PenguinProportions.forModel(original);
         Matrix4f nativeHead=PenguinHeadRenderer.headMatrix(original);
@@ -60,12 +62,55 @@ public final class PenguinAnimationPose {
         }
         return new PenguinAnimationPose(1f,matrices,headDelta,bindClip);
     }
+    /**
+     * Pure 16-joint body-only pose for an ordinary (non-action) draw of a schema 2 mesh.
+     *
+     * <p>The five native roots already contain their bind pivots. The constructor then applies the
+     * shared {@link PenguinLegPose} anatomical rebind once, so pelvis-pinned seam vertices stay on
+     * the torso while hip/knee/foot vertices keep their explicit weights and follow the ordinary
+     * native leg rotations through the short control pivots. The root stays identity, the static
+     * root motion is preserved, and {@code headDelta} stays identity: this factory is deliberately
+     * NOT fed to action selection, the head or held-item semantics.
+     * Matrices are in penguin model pixels, matching the baked skin.
+     */
+    static PenguinAnimationPose nativeBodyOnly(PenguinBodyModel parts,PenguinAnimationClip bind){
+        if(parts==null)throw new IllegalArgumentException("native body-only pose needs parts");
+        if(bind==null)throw new IllegalArgumentException("native body-only pose needs a bind clip");
+        Matrix4f[] matrices=new Matrix4f[PenguinRig.COUNT];
+        matrices[PenguinRig.ROOT]=new Matrix4f();
+        Matrix4f body=part(parts.body());
+        matrices[PenguinRig.PELVIS]=new Matrix4f(body).translate(bind.bind(PenguinRig.PELVIS));
+        matrices[PenguinRig.CHEST]=new Matrix4f(matrices[PenguinRig.PELVIS])
+                .translate(bind.bind(PenguinRig.CHEST).sub(bind.bind(PenguinRig.PELVIS)));
+        matrices[PenguinRig.HEAD]=new Matrix4f(matrices[PenguinRig.CHEST])
+                .translate(bind.bind(PenguinRig.HEAD).sub(bind.bind(PenguinRig.CHEST)));
+        limb(matrices,bind,parts.rightWing(),PenguinRig.RIGHT_WING);
+        limb(matrices,bind,parts.leftWing(),PenguinRig.LEFT_WING);
+        limb(matrices,bind,parts.rightFoot(),PenguinRig.RIGHT_HIP);
+        limb(matrices,bind,parts.leftFoot(),PenguinRig.LEFT_HIP);
+        return new PenguinAnimationPose(matrices,bind);
+    }
+    private static void limb(Matrix4f[] matrices,PenguinAnimationClip bind,ModelPart rootPart,int root){
+        matrices[root]=part(rootPart);
+        matrices[root+1]=new Matrix4f(matrices[root]).translate(bind.bind(root+1).sub(bind.bind(root)));
+        matrices[root+2]=new Matrix4f(matrices[root+1]).translate(bind.bind(root+2).sub(bind.bind(root+1)));
+    }
+    /** Native body-only constructor: root identity, weight 1, rigid identity head delta. */
+    private PenguinAnimationPose(Matrix4f[] matrices,PenguinAnimationClip bindClip){
+        weight=1f;
+        // Copy first: callers such as the dance solver reuse their world array and must never
+        // receive an already-retargeted leg chain. The anatomical rebind applies exactly once.
+        for(int i=0;i<world.length;i++)world[i]=new Matrix4f(matrices[i]);
+        PenguinLegPose.apply(world,bindClip);
+        for(int i=0;i<skin.length;i++)skin[i]=new Matrix4f(world[i]).translate(bindClip.bind(i).negate());
+        headDelta=new Matrix4f();
+    }
     private PenguinAnimationPose(float weight,Matrix4f[] matrices,Matrix4f headDelta,PenguinAnimationClip bindClip){
         this.weight=weight;
-        for(int i=0;i<world.length;i++){
-            world[i]=new Matrix4f(matrices[i]);
-            skin[i]=new Matrix4f(world[i]).translate(bindClip.bind(i).negate());
-        }
+        // Same copy-once contract as the body-only factory: the caller's rig stays unchanged.
+        for(int i=0;i<world.length;i++)world[i]=new Matrix4f(matrices[i]);
+        PenguinLegPose.apply(world,bindClip);
+        for(int i=0;i<skin.length;i++)skin[i]=new Matrix4f(world[i]).translate(bindClip.bind(i).negate());
         this.headDelta=new Matrix4f(headDelta);
     }
     public static PenguinAnimationPose evaluate(PenguinAnimationClip clip,PenguinAnimationClip.Sample sample,

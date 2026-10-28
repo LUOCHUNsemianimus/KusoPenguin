@@ -18,6 +18,13 @@ import net.minecraft.world.entity.EntityType;
 public final class PenguinEntitySupport {
     private static final ResourceLocation MAID_ID =
             ResourceLocation.fromNamespaceAndPath("touhou_little_maid", "maid");
+    /**
+     * Exact visual-only Cataclysm boss id. It is intentionally not added to either action set:
+     * the boss keeps its native AI, attack, grab and death state, and only its rendered body is
+     * replaced by the optional compat bridge.
+     */
+    private static final ResourceLocation MALEDICTUS_ID =
+            ResourceLocation.fromNamespaceAndPath("cataclysm", "maledictus");
     private static final Set<EntityType<?>> SUPPORTED_TYPES = Set.of(
             EntityType.PLAYER,
             EntityType.SKELETON,
@@ -46,6 +53,15 @@ public final class PenguinEntitySupport {
     /** Exact optional maid registry id, resolved without touching a maid API class. */
     public static boolean isMaid(EntityType<?> type) {
         return type != null && MAID_ID.equals(BuiltInRegistries.ENTITY_TYPE.getKey(type));
+    }
+
+    /**
+     * Exact optional Maledictus id for the visual-only render bridge. This predicate never loads a
+     * Cataclysm class and is deliberately separate from both {@link #isSupportedType} and
+     * {@link #isProneType}, so no Kuso action/death/dance eligibility is widened.
+     */
+    public static boolean isNativeAnimatedBoss(EntityType<?> type) {
+        return type != null && MALEDICTUS_ID.equals(BuiltInRegistries.ENTITY_TYPE.getKey(type));
     }
 
     /** Render-only prone contract. These types are intentionally absent from the set above. */

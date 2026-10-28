@@ -71,14 +71,25 @@ public final class PenguinMeshModel {
     private final Part leftWing;
     private final Part rightFoot;
     private final Part leftFoot;
+    /**
+     * Schema 2 may mix 8-float automatic vertices (body/wings) with 11-float explicit foot
+     * vertices. This flag is the single load-time decision for the body-only native fallback and
+     * for the weighted floor bounds; it is never re-read per frame.
+     */
+    private final boolean hasExplicitBindings;
 
     private PenguinMeshModel(Part body, Part rightWing, Part leftWing, Part rightFoot,
-                             Part leftFoot) {
+                             Part leftFoot, boolean hasExplicitBindings) {
         this.body = body;
         this.rightWing = rightWing;
         this.leftWing = leftWing;
         this.rightFoot = rightFoot;
         this.leftFoot = leftFoot;
+        this.hasExplicitBindings = hasExplicitBindings;
+    }
+
+    boolean hasExplicitBindings() {
+        return hasExplicitBindings;
     }
 
     /**
@@ -109,6 +120,19 @@ public final class PenguinMeshModel {
         return loaded==null||!PenguinMeshPreview.isEnabled()?null:loaded.skins().get(PenguinMeshPreview.quality());
     }
 
+    /**
+     * Identity lookup of the already-baked skin for this exact tier. Used by weighted bounds so a
+     * non-current tier never borrows another tier's topology through the global preview quality.
+     */
+    static PenguinSkinnedMesh skinFor(PenguinMeshModel mesh){
+        Loaded loaded=cache;
+        if(loaded==null)return null;
+        for(Map.Entry<PenguinMeshPreview.Quality,PenguinMeshModel> entry:loaded.meshes().entrySet()){
+            if(entry.getValue()==mesh)return loaded.skins().get(entry.getKey());
+        }
+        return null;
+    }
+
     public static SimplePreparableReloadListener<Loaded>
             reloadListener() {
         return RELOAD_LISTENER;
@@ -136,12 +160,25 @@ public final class PenguinMeshModel {
                 this.leftFoot);
     }
 
-    /** Bounds of actual static mesh geometry under one current animation root, in model blocks. */
-    float maxY(ModelPart modelPart, String name) {
-        Part meshPart = switch(name) {
-            case "body" -> this.body;
-            case "right_foot" -> this.rightFoot;
-            case "left_foot" -> this.leftFoot;
+    /**
+     * Model-block upper bound of one source part, using the same prepared five roots for the
+     * whole assembly. Schema 2 legs must be measured from their actual deformed skin points
+     * (pelvis-pinned seam vertices stay on the torso); schema 1 keeps the old rigid root bound.
+     */
+    float maxY(PenguinBodyModel parts, String name) {
+        Part meshPart = meshPart(name);
+        if (hasExplicitBindings) {
+            PenguinSkinnedMesh skin = skinFor(this);
+            PenguinAnimationClip bind = animationClip();
+            if (skin == null || bind == null) {
+                throw new IllegalStateException("Weighted penguin mesh is missing its baked skin");
+            }
+            return skin.maxY(PenguinAnimationPose.nativeBodyOnly(parts, bind), name) / PIXEL;
+        }
+        ModelPart modelPart = switch(name) {
+            case "body" -> parts.body();
+            case "right_foot" -> parts.rightFoot();
+            case "left_foot" -> parts.leftFoot();
             default -> throw new IllegalArgumentException(name);
         };
         PoseStack stack = new PoseStack();modelPart.translateAndRotate(stack);
@@ -155,6 +192,15 @@ public final class PenguinMeshModel {
         return max;
     }
 
+    private Part meshPart(String name) {
+        return switch(name) {
+            case "body" -> this.body;
+            case "right_foot" -> this.rightFoot;
+            case "left_foot" -> this.leftFoot;
+            default -> throw new IllegalArgumentException(name);
+        };
+    }
+
     private static float transformedY(Vertex vertex,org.joml.Matrix4fc matrix,org.joml.Vector3f point) {
         point.set(vertex.x()/PIXEL,vertex.y()/PIXEL,vertex.z()/PIXEL);matrix.transformPosition(point);return point.y;
     }
@@ -165,6 +211,14 @@ public final class PenguinMeshModel {
      * {@link PenguinPronePose}. The result is immutable per loaded tier and is cached there.
      */
     float maxNegZ(PenguinBodyModel parts) {
+        if (hasExplicitBindings) {
+            PenguinSkinnedMesh skin = skinFor(this);
+            PenguinAnimationClip bind = animationClip();
+            if (skin == null || bind == null) {
+                throw new IllegalStateException("Weighted penguin mesh is missing its baked skin");
+            }
+            return skin.maxNegZ(PenguinAnimationPose.nativeBodyOnly(parts, bind)) / PIXEL;
+        }
         float max = Float.NEGATIVE_INFINITY;
         max = Math.max(max, maxNegZ(parts.body(), this.body));
         max = Math.max(max, maxNegZ(parts.rightWing(), this.rightWing));
@@ -236,9 +290,10 @@ public final class PenguinMeshModel {
         JsonObject root = rootElement.getAsJsonObject();
         JsonElement schema = root.get("schema");
         if (schema == null || !schema.isJsonPrimitive() || !schema.getAsJsonPrimitive().isNumber()
-                || schema.getAsDouble() != 1.0D) {
-            throw new IOException("Penguin mesh schema must be exactly the number 1");
+                || (schema.getAsDouble() != 1.0D && schema.getAsDouble() != 2.0D)) {
+            throw new IOException("Penguin mesh schema must be exactly the number 1 or 2");
         }
+        boolean explicitAllowed = schema.getAsDouble() == 2.0D;
         JsonElement partsElement = root.get("parts");
         if (partsElement == null || !partsElement.isJsonArray()) {
             throw new IOException("Penguin mesh parts must be an array");
@@ -252,7 +307,7 @@ public final class PenguinMeshModel {
         List<Part> parsedParts = new ArrayList<>(partsArray.size());
         Set<String> names = new HashSet<>();
         for (int i = 0; i < partsArray.size(); i++) {
-            Part part = parsePart(partsArray.get(i), "parts[" + i + "]");
+            Part part = parsePart(partsArray.get(i), "parts[" + i + "]", explicitAllowed);
             if (!EXPECTED_PARTS.contains(part.name())) {
                 throw new IOException("parts[" + i + "] has unknown name '" + part.name() + "'");
             }
@@ -271,7 +326,20 @@ public final class PenguinMeshModel {
         Part leftWing = find(parsedParts, "left_wing");
         Part rightFoot = find(parsedParts, "right_foot");
         Part leftFoot = find(parsedParts, "left_foot");
-        return new PenguinMeshModel(body, rightWing, leftWing, rightFoot, leftFoot);
+        boolean hasExplicitBindings = false;
+        for (Part part : parsedParts) {
+            for (Triangle triangle : part.triangles()) {
+                if (triangle.a().binding() != null) {
+                    hasExplicitBindings = true;
+                    break;
+                }
+            }
+            if (hasExplicitBindings) {
+                break;
+            }
+        }
+        return new PenguinMeshModel(body, rightWing, leftWing, rightFoot, leftFoot,
+                hasExplicitBindings);
     }
 
     private static Part find(List<Part> parts, String name) throws IOException {
@@ -283,7 +351,8 @@ public final class PenguinMeshModel {
         throw new IOException("Missing penguin mesh part '" + name + "'");
     }
 
-    private static Part parsePart(JsonElement element, String path) throws IOException {
+    private static Part parsePart(JsonElement element, String path, boolean explicitAllowed)
+            throws IOException {
         if (!element.isJsonObject()) {
             throw new IOException(path + " must be an object");
         }
@@ -317,7 +386,7 @@ public final class PenguinMeshModel {
         List<Triangle> triangles = new ArrayList<>(trianglesArray.size());
         for (int i = 0; i < trianglesArray.size(); i++) {
             triangles.add(parseTriangle(trianglesArray.get(i),
-                    path + ".triangles[" + i + "]"));
+                    path + ".triangles[" + i + "]", explicitAllowed));
         }
         return new Part(name, pivot.x(), pivot.y(), pivot.z(),
                 List.copyOf(triangles));
@@ -329,7 +398,8 @@ public final class PenguinMeshModel {
                 && Math.abs((double) pivot.z() - expected[2]) <= PIVOT_EPSILON;
     }
 
-    private static Triangle parseTriangle(JsonElement element, String path) throws IOException {
+    private static Triangle parseTriangle(JsonElement element, String path, boolean explicitAllowed)
+            throws IOException {
         if (!element.isJsonArray()) {
             throw new IOException(path + " must be an array of three vertices");
         }
@@ -337,19 +407,30 @@ public final class PenguinMeshModel {
         if (points.size() != 3) {
             throw new IOException(path + " must have exactly 3 vertices, found " + points.size());
         }
-        return new Triangle(
-                parseVertex(points.get(0), path + "[0]"),
-                parseVertex(points.get(1), path + "[1]"),
-                parseVertex(points.get(2), path + "[2]"));
+        Vertex a = parseVertex(points.get(0), path + "[0]", explicitAllowed);
+        Vertex b = parseVertex(points.get(1), path + "[1]", explicitAllowed);
+        Vertex c = parseVertex(points.get(2), path + "[2]", explicitAllowed);
+        boolean any = a.binding() != null || b.binding() != null || c.binding() != null;
+        boolean all = a.binding() != null && b.binding() != null && c.binding() != null;
+        if (any && !all) {
+            throw new IOException(path + " must be entirely explicit or entirely automatic");
+        }
+        return new Triangle(a, b, c);
     }
 
-    private static Vertex parseVertex(JsonElement element, String path) throws IOException {
+    private static Vertex parseVertex(JsonElement element, String path, boolean explicitAllowed)
+            throws IOException {
         if (!element.isJsonArray()) {
-            throw new IOException(path + " must be an array of 8 numbers");
+            throw new IOException(path + " must be an array of 8 or 11 numbers");
         }
         JsonArray values = element.getAsJsonArray();
-        if (values.size() != 8) {
-            throw new IOException(path + " must have exactly 8 numbers, found " + values.size());
+        boolean explicit = values.size() == 11;
+        if (explicit && !explicitAllowed) {
+            throw new IOException(path + " explicit bindings require schema 2");
+        }
+        if (!explicit && values.size() != 8) {
+            throw new IOException(path + " must have exactly 8 or 11 numbers, found "
+                    + values.size());
         }
         double[] v = new double[8];
         for (int i = 0; i < 8; i++) {
@@ -381,7 +462,35 @@ public final class PenguinMeshModel {
         if (Math.abs(normalLength - 1.0D) > NORMAL_TOLERANCE) {
             throw new IOException(path + " normal must be unit length (found " + normalLength + ")");
         }
-        return new Vertex(f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7]);
+        Binding binding = null;
+        if (explicit) {
+            int jointA = parseJoint(values.get(8), path + "[8]");
+            int jointB = parseJoint(values.get(9), path + "[9]");
+            JsonElement weightElement = values.get(10);
+            if (!weightElement.isJsonPrimitive() || !weightElement.getAsJsonPrimitive().isNumber()) {
+                throw new IOException(path + "[10] must be a number");
+            }
+            double weight = weightElement.getAsDouble();
+            if (!Double.isFinite(weight) || weight < 0.0D || weight > 1.0D
+                    || !Float.isFinite((float) weight)) {
+                throw new IOException(path + "[10] weight must be finite in [0,1]");
+            }
+            binding = new Binding(jointA, jointB, (float) weight);
+        }
+        return new Vertex(f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], binding);
+    }
+
+    private static int parseJoint(JsonElement element, String path) throws IOException {
+        if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isNumber()) {
+            throw new IOException(path + " joint must be a number");
+        }
+        double value = element.getAsDouble();
+        if (!Double.isFinite(value) || value != Math.rint(value)
+                || value < 0.0D || value > PenguinRig.COUNT - 1) {
+            throw new IOException(path + " joint must be an integer in [0,"
+                    + (PenguinRig.COUNT - 1) + "]");
+        }
+        return (int) value;
     }
 
     private static Vertex parseVertexNumbers(JsonElement element, String path, int expected)
@@ -409,8 +518,20 @@ public final class PenguinMeshModel {
         return new Vertex(result[0], result[1], result[2], 0.0F, 0.0F, 0.0F, 0.0F, 0.0F);
     }
 
+    /**
+     * Authoritative two-influence binding for one schema 2 vertex: joints are indices into the
+     * shared 16-joint penguin rig and {@code weightB} is the weight of {@code jointB}.
+     * Position/UV/normal remain the legacy 8 floats; no bind-space point or units change.
+     */
+    record Binding(int jointA, int jointB, float weightB) {
+    }
+
     record Vertex(float x, float y, float z, float u, float v,
-                          float nx, float ny, float nz) {
+                          float nx, float ny, float nz, Binding binding) {
+        Vertex(float x, float y, float z, float u, float v,
+               float nx, float ny, float nz) {
+            this(x, y, z, u, v, nx, ny, nz, null);
+        }
     }
 
     record Triangle(Vertex a, Vertex b, Vertex c) {

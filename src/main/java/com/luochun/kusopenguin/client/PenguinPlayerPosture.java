@@ -64,19 +64,50 @@ final class PenguinPlayerPosture {
             penguin.resetPose();PenguinPoseAdapters.find(model).apply(penguin,model,entity);
             posture.applyCorrections(penguin,model);
             float ground=profile.footY()/16F-(2F/16F)/.9375F;
-            float torso=lift(mesh,penguin.body(),"body",profile,ground);
-            float right=lift(mesh,penguin.rightFoot(),"right_foot",profile,ground);
-            float left=lift(mesh,penguin.leftFoot(),"left_foot",profile,ground);
-            head=new Matrix4f().translation(0,-torso*profile.bodyScale()/16F,0).mul(head);
-            posture=new PenguinPlayerPosture(kind,head,torso,right,left);
+            if(mesh.hasExplicitBindings()) {
+                // Connected weighted legs are one assembly: the pelvis-pinned seam belongs to the
+                // torso while the feet follow the same leg skin. Measure the real deformed bounds
+                // and apply one signed floor correction to body, both foot roots, arms and head.
+                // A hovering assembly is allowed to move down; parts are never lifted separately.
+                float correction=weightedCorrection(mesh,penguin,profile,ground);
+                head=new Matrix4f().translation(0,-correction*profile.bodyScale()/16F,0).mul(head);
+                posture=new PenguinPlayerPosture(kind,head,correction,correction,correction);
+            } else {
+                // Schema 1 keeps the old independent rigid-root lifts unchanged.
+                float torso=lift(mesh,penguin,"body",profile,ground);
+                float right=lift(mesh,penguin,"right_foot",profile,ground);
+                float left=lift(mesh,penguin,"left_foot",profile,ground);
+                head=new Matrix4f().translation(0,-torso*profile.bodyScale()/16F,0).mul(head);
+                posture=new PenguinPlayerPosture(kind,head,torso,right,left);
+            }
         }
         return posture;
     }
 
-    private static float lift(PenguinMeshModel mesh,ModelPart part,String name,
+    /**
+     * Crouch lift from the actual prepared assembly. Schema 2 uses the same weighted skin and
+     * body-only native pose as rendering, filtered by source part; schema 1 keeps the old rigid
+     * root bound. No RenderContext pose/posture is entered here, so this cannot recurse.
+     */
+    private static float lift(PenguinMeshModel mesh,PenguinBodyModel parts,String name,
                               PenguinProportions.Profile profile,float ground) {
-        float max=profile.bodyOffsetBlocks()+mesh.maxY(part,name)*profile.bodyScale();
+        float max=profile.bodyOffsetBlocks()+mesh.maxY(parts,name)*profile.bodyScale();
         return Math.max(0,max-ground)*16F/profile.bodyScale();
+    }
+
+    /**
+     * One signed correction (model pixels) for the connected weighted assembly. The pelvis-pinned
+     * seam is already part of the torso bound, so the maximum over the torso and both moving foot
+     * regions is the true floor contact. Positive pixels lift the assembly; negative pixels lower a
+     * hovering one. It is applied once to the body, both wings, both feet and the head mount.
+     */
+    private static float weightedCorrection(PenguinMeshModel mesh,PenguinBodyModel parts,
+                                            PenguinProportions.Profile profile,float ground) {
+        float max=Float.NEGATIVE_INFINITY;
+        for(String name:new String[]{"body","right_foot","left_foot"}) {
+            max=Math.max(max,profile.bodyOffsetBlocks()+mesh.maxY(parts,name)*profile.bodyScale());
+        }
+        return (max-ground)*16F/profile.bodyScale();
     }
 
     private static Kind classify(LivingEntity entity, HumanoidModel<?> model) {
