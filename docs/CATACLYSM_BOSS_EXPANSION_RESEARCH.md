@@ -2,7 +2,7 @@
 
 日期：2026-10-28。范围：Ignis、Scylla、Ender Guardian、Netherite Monstrosity。
 
-**后续实施更新：Scylla 与 Ignis 首版视觉替换已实现，分别见 [SCYLLA_COMPAT.md](SCYLLA_COMPAT.md)、[IGNIS_COMPAT.md](IGNIS_COMPAT.md)，均等待用户观感验收。Ender Guardian／Netherite Monstrosity 仍为调研方案；下文保留原始调研结论与计划。**
+**后续实施更新：Scylla 与 Ignis 首版视觉替换已实现，分别见 [SCYLLA_COMPAT.md](SCYLLA_COMPAT.md)、[IGNIS_COMPAT.md](IGNIS_COMPAT.md)，均等待用户观感验收；Scylla 肩根修正已获用户观感确认。Ender Guardian 视觉-only 替换已实现，开发检查完成、待用户观感验收（[ENDER_GUARDIAN_COMPAT.md](ENDER_GUARDIAN_COMPAT.md)）；Netherite Monstrosity 是唯一仍未实现的 Boss。下文保留原始调研结论与计划。**
 **以下为原调研时点记录，当时尚未实现四个 Boss；最新状态以上方实施更新及专用文档为准。** 不修改原生 AI、攻击、伤害、碰撞体、体型、位移或动画时序。
 
 ## 结论与推荐顺序

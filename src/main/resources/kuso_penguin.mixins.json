@@ -45,7 +45,8 @@
     "IronGeoArmorLayerMixin",
     "IronHumanoidRendererMixin",
     "MinecraftAttackMixin",
-    "IgnisShieldLayerMixin"
+    "IgnisShieldLayerMixin",
+    "EnderGuardianLayerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

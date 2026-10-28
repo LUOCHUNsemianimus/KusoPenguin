@@ -64,7 +64,7 @@ public final class PenguinMeshModel {
     private record Loaded(Map<PenguinMeshPreview.Quality,PenguinMeshModel> meshes,
                           Map<PenguinMeshPreview.Quality,PenguinSkinnedMesh> skins,
                           Map<PenguinAction,PenguinAnimationClip> clips,
-                          PenguinSkinnedMesh ignisSkin) {}
+                          PenguinSkinnedMesh ignisSkin, PenguinSkinnedMesh guardianSkin) {}
     private static volatile Loaded cache;
 
     private final Part body;
@@ -125,6 +125,12 @@ public final class PenguinMeshModel {
     public static PenguinSkinnedMesh ignisSkin(){
         Loaded loaded=cache;
         return loaded==null||!PenguinMeshPreview.isEnabled()?null:loaded.ignisSkin();
+    }
+
+    /** Independently baked upper-chest opening for the optional Ender Guardian. */
+    public static PenguinSkinnedMesh guardianSkin(){
+        Loaded loaded=cache;
+        return loaded==null||!PenguinMeshPreview.isEnabled()?null:loaded.guardianSkin();
     }
 
     /**
@@ -552,6 +558,15 @@ public final class PenguinMeshModel {
      * Any malformed tier fails the whole reload with a logged, explicit cause rather than
      * installing a partial map or silently falling back to another tier.
      */
+    private static PenguinSkinnedMesh loadVariant(ResourceManager manager,ResourceLocation location,
+                                                   PenguinAnimationClip clip) throws IOException {
+        Resource resource=manager.getResource(location)
+                .orElseThrow(()->new IOException("Missing resource "+location));
+        try(Reader reader=new InputStreamReader(resource.open(),StandardCharsets.UTF_8)){
+            return PenguinSkinnedMesh.bake(parseParts(reader,EXPECTED_PARTS),clip);
+        }
+    }
+
     private static final class ReloadListener
             extends SimplePreparableReloadListener<Loaded> {
         @Override
@@ -593,15 +608,11 @@ public final class PenguinMeshModel {
                 }
                 Map<PenguinMeshPreview.Quality,PenguinSkinnedMesh> skins=new EnumMap<>(PenguinMeshPreview.Quality.class);
                 for(var entry:parsed.entrySet())skins.put(entry.getKey(),PenguinSkinnedMesh.bake(entry.getValue(),clip));
-                ResourceLocation ignisLocation=meshResource("cataclysm/ignis_legless.json");
-                Resource ignisResource=resourceManager.getResource(ignisLocation)
-                        .orElseThrow(()->new IOException("Missing resource "+ignisLocation));
-                PenguinSkinnedMesh ignisSkin;
-                try(Reader reader=new InputStreamReader(ignisResource.open(),StandardCharsets.UTF_8)){
-                    ignisSkin=PenguinSkinnedMesh.bake(parseParts(reader,
-                            EXPECTED_PARTS),clip);
-                }
-                return new Loaded(Map.copyOf(parsed),Map.copyOf(skins),Map.copyOf(clips),ignisSkin);
+                PenguinSkinnedMesh ignisSkin=loadVariant(resourceManager,
+                        meshResource("cataclysm/ignis_legless.json"),clip);
+                PenguinSkinnedMesh guardianSkin=loadVariant(resourceManager,
+                        meshResource("cataclysm/ender_guardian.json"),clip);
+                return new Loaded(Map.copyOf(parsed),Map.copyOf(skins),Map.copyOf(clips),ignisSkin,guardianSkin);
             } catch (IOException | RuntimeException exception) {
                 LOGGER.error("Failed to load experimental penguin mesh tiers {}", MODELS.values(),
                         exception);

@@ -33,6 +33,9 @@ public final class PenguinEntitySupport {
             ResourceLocation.fromNamespaceAndPath("cataclysm", "scylla");
     private static final ResourceLocation IGNIS_ID =
             ResourceLocation.fromNamespaceAndPath("cataclysm", "ignis");
+    /** Exact visual-only Ender Guardian id; separate from both action and prone allowlists. */
+    private static final ResourceLocation ENDER_GUARDIAN_ID =
+            ResourceLocation.fromNamespaceAndPath("cataclysm", "ender_guardian");
     private static final Set<EntityType<?>> SUPPORTED_TYPES = Set.of(
             EntityType.PLAYER,
             EntityType.SKELETON,
@@ -87,7 +90,13 @@ public final class PenguinEntitySupport {
      * model class, so this union cannot make one boss accept the other's model.
      */
     public static boolean isNativeAnimatedBoss(EntityType<?> type) {
-        return isMaledictus(type) || isScylla(type) || isIgnis(type);
+        return isMaledictus(type) || isScylla(type) || isIgnis(type)
+                || isEnderGuardian(type);
+    }
+
+    /** Exact optional Ender Guardian id, kept out of the action/prone allowlists. */
+    public static boolean isEnderGuardian(EntityType<?> type) {
+        return type != null && ENDER_GUARDIAN_ID.equals(BuiltInRegistries.ENTITY_TYPE.getKey(type));
     }
 
     /** Render-only prone contract. These types are intentionally absent from the set above. */

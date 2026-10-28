@@ -7,6 +7,7 @@ import com.luochun.kusopenguin.client.PenguinRenderContext;
 import com.luochun.kusopenguin.client.compat.MaidCompatClient;
 import com.luochun.kusopenguin.client.compat.MaledictusCompatClient;
 import com.luochun.kusopenguin.client.compat.IgnisCompatClient;
+import com.luochun.kusopenguin.client.compat.EnderGuardianCompatClient;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -62,6 +63,10 @@ public abstract class LivingEntityRendererMixin {
             return;
         }
         if (IgnisCompatClient.renderNativePass(entity, model, poseStack, buffer,
+                packedLight, packedOverlay, color, originalBuffer)) {
+            return;
+        }
+        if (EnderGuardianCompatClient.renderNativePass(entity, model, poseStack, buffer,
                 packedLight, packedOverlay, color, originalBuffer)) {
             return;
         }
