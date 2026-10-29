@@ -24,6 +24,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = REPO / "dev-libs" / "compat-launch.json"
 DEFAULT_YSM = REPO / "dev-libs" / "ysm-2.6.5-neoforge+mc1.21.1-release.jar"
+MELODIES_DESTINATION = "immersive_melodies-neoforge-0.8.0+1.21.1.jar"
 CONFIG_KEYS = ("profileJson", "librariesDir", "assetsDir", "javaExe")
 
 
@@ -113,6 +114,8 @@ def main() -> int:
     parser.add_argument("--mod-jar", help="current built kuso_penguin jar")
     parser.add_argument("--maid-jar", required=True, help="resolved TLM 1.5.3 runtime jar")
     parser.add_argument("--ysm-jar", default=str(DEFAULT_YSM), help="pinned local YSM 2.6.5 jar")
+    parser.add_argument("--melodies-jar",
+                        help="optional resolved Immersive Melodies jar; omitted means absent-mod run")
     args = parser.parse_args()
 
     config_path = resolve_cli(args.config)
@@ -124,12 +127,15 @@ def main() -> int:
     game_dir = resolve_cli(args.game_dir)
     maid_jar = resolve_cli(args.maid_jar)
     ysm_jar = resolve_cli(args.ysm_jar)
+    melodies_jar = resolve_cli(args.melodies_jar) if args.melodies_jar else None
     mod_jar = resolve_cli(args.mod_jar) if args.mod_jar else latest_built_jar()
 
     for label, path in (("profile", profile_path), ("mod jar", mod_jar), ("maid jar", maid_jar),
                         ("YSM jar", ysm_jar), ("java", java_exe)):
         if path is None or not path.is_file():
             fail(f"{label} not found: {path}")
+    if melodies_jar is not None and not melodies_jar.is_file():
+        fail(f"Immersive Melodies jar not found: {melodies_jar}")
     for label, path in (("libraries", libraries_dir), ("assets", assets_dir)):
         if not path.is_dir():
             fail(f"{label} directory not found: {path}")
@@ -227,6 +233,12 @@ def main() -> int:
         destination = mods_dir / source.name
         if destination.resolve() != source.resolve():
             shutil.copy2(source, destination)
+    if melodies_jar is not None:
+        # Always stage under the official filename so the Maven artifact name cannot create a
+        # duplicate mod next to a manually downloaded 0.8.0 jar.
+        destination = mods_dir / MELODIES_DESTINATION
+        if destination.resolve() != melodies_jar.resolve():
+            shutil.copy2(melodies_jar, destination)
 
     offline_uuid = str(uuid.UUID(bytes=hashlib.md5(b"OfflinePlayer:Dev").digest(), version=3))
     values = {

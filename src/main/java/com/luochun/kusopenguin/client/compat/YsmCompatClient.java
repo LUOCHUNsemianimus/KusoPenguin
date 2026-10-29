@@ -68,6 +68,14 @@ public final class YsmCompatClient {
         return cached;
     }
 
+    /**
+     * Model-type hint for the actual nested YSM render proxy. It only classifies the current
+     * EntityModel; it never reads or mutates YSM bones, capture state or native frame math.
+     */
+    public static boolean isView(Object model) {
+        return isAvailable() && model instanceof Impl.YsmView;
+    }
+
     private static boolean present(String name) {
         try {
             Class.forName(name, false, YsmCompatClient.class.getClassLoader());

@@ -2,8 +2,11 @@ package com.luochun.kusopenguin.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.luochun.kusopenguin.animation.PenguinAction;
+import com.luochun.kusopenguin.client.compat.GeoMaidView;
 import com.luochun.kusopenguin.client.compat.IronCastingCompatClient;
 import com.luochun.kusopenguin.client.compat.NativeCastingView;
+import com.luochun.kusopenguin.client.compat.PenguinMelodiesCompatClient;
+import com.luochun.kusopenguin.client.compat.YsmCompatClient;
 import java.util.ArrayDeque;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.player.AbstractClientPlayer;
@@ -22,6 +25,7 @@ public final class PenguinRenderContext {
         boolean postureEvaluated;PenguinPlayerPosture posture;
         boolean danceEvaluated,dancing;
         boolean castingEvaluated;IronCastingCompatClient.Snapshot casting;
+        boolean melodiesEvaluated;PenguinMelodiesCompatClient.Snapshot melodies;
         Frame(LivingEntity entity,EntityModel<?> model,float partial){this.entity=entity;this.model=model;this.partial=partial;}
     }
     private PenguinRenderContext(){}
@@ -57,16 +61,48 @@ public final class PenguinRenderContext {
             return f.dancing=false;
         if(!PenguinMeshPreview.isEnabled()||!PenguinRenderSupport.shouldReplace(entity)
                 ||PenguinDeathClient.rendering(entity))return false;
+        // A live instrument-holding snapshot outranks the optional dance/taunt rig. The snapshot
+        // owns the wing pose and, for Geo/YSM, the supplemental head delta for this frame.
+        if(activeFlyingKick(f))return false;
+        if(melodies()!=null)return false;
         boolean revival=com.luochun.kusopenguin.client.revival.RevivalClientState.pole(entity);
         if(!revival&&!com.luochun.kusopenguin.client.music.DiscClient.dancing(entity))return false;
-        PenguinAction action=PenguinPoseClient.action(entity);
-        if(action==PenguinAction.FLYING_KICK){
-            PenguinAnimationClip clip=PenguinMeshModel.animationClip(action);
-            float age=PenguinPoseClient.age(entity,action,f.partial);
-            if(clip!=null&&age>=0&&age<clip.totalDuration())return false;
-        }
         PenguinPlayerPosture p=posture();
         return f.dancing=p==null||!p.suppressesSpecialClips();
+    }
+    private static boolean activeFlyingKick(Frame f){
+        PenguinAction action=PenguinPoseClient.action(f.entity);
+        if(action!=PenguinAction.FLYING_KICK)return false;
+        PenguinAnimationClip clip=PenguinMeshModel.animationClip(action);
+        float age=PenguinPoseClient.age(f.entity,action,f.partial);
+        return clip!=null&&age>=0&&age<clip.totalDuration();
+    }
+    /**
+     * One cached instrument snapshot per draw, after death, kick, native/Iron casting and
+     * non-standing posture have kept their priority. Every null path leaves the ordinary prepared
+     * mesh and all native matrices untouched.
+     */
+    static PenguinMelodiesCompatClient.Snapshot melodies(){
+        Frame f=FRAMES.get().peek();
+        if(f==null)return null;
+        if(f.melodiesEvaluated)return f.melodies;
+        f.melodiesEvaluated=true;
+        if(shared==null||!PenguinMeshPreview.isEnabled()
+                ||!PenguinRenderSupport.shouldReplace(f.entity)
+                ||PenguinDeathClient.rendering(f.entity))return null;
+        if(f.model instanceof NativeCastingView view&&view.kusoPenguin$ready())return null;
+        if(!PenguinMelodiesCompatClient.holdingInstrument(f.entity))return null;
+        if(casting()!=null)return null;
+        if(activeFlyingKick(f))return null;
+        PenguinPlayerPosture posture=posture();
+        if(posture!=null&&posture.suppressesSpecialClips())return null;
+        if(PenguinProportions.forModel(f.model)==null
+                ||PenguinPoseAdapters.find(f.model)==null)return null;
+        // Only an actual YSM maid render proxy lacks the native player IM progress update. Every
+        // other supported model keeps its original clock and passes false.
+        f.melodies=PenguinMelodiesCompatClient.snapshot(f.entity,
+                YsmCompatClient.isView(f.model));
+        return f.melodies;
     }
     /**
      * One optional Iron casting snapshot per draw. Death and an active FLYING_KICK keep priority;
@@ -149,6 +185,10 @@ public final class PenguinRenderContext {
         adapter.apply(penguin,f.model,f.entity);
         PenguinPlayerPosture posture=posture();
         if(posture!=null)posture.applyCorrections(penguin,f.model);
+        // Instrument arm angles are deliberately applied after adapter/posture corrections so the
+        // snapshot owns only the wing rotations and never disturbs prepared pivots or scales.
+        PenguinMelodiesCompatClient.Snapshot instrument=melodies();
+        if(instrument!=null)instrument.applyTo(penguin);
     }
     /**
      * Additional translation from the penguin body origin to the rounded upper back, in penguin
@@ -201,6 +241,8 @@ public final class PenguinRenderContext {
             f.pose=view.kusoPenguin$nativePose(shared,profile(f.model));
             return f.pose;
         }
+        // isDanceFrame sets danceEvaluated before it consults the instrument snapshot, so the
+        // posture/profile lookup inside melodies() cannot re-enter an undecided dance frame.
         if(isDanceFrame(f.entity)){
             prepareBody(shared);
             f.pose=com.luochun.kusopenguin.client.revival.RevivalClientState.pole(f.entity)
@@ -210,6 +252,8 @@ public final class PenguinRenderContext {
                     :PenguinDancePose.evaluate(com.luochun.kusopenguin.client.music.DiscClient.danceElapsed(f.entity,f.partial),shared,f.model,profile(f.model));
             return f.pose;
         }
+        // Instrument holding is an ordinary prepared mesh draw, not a taunt/dance/action pose.
+        if(melodies()!=null)return null;
         // The effect-add path may publish TAUNT. Prone animals never evaluate humanoid/action
         // clips; returning null keeps their static slide pose and leaves the server action sets
         // untouched.
@@ -252,6 +296,16 @@ public final class PenguinRenderContext {
         if(p!=null){stack.mulPose(p.headDelta);return;}
         PenguinPlayerPosture posture=posture();
         if(posture!=null)posture.applyHead(stack);
+        if(f!=null){
+            PenguinMelodiesCompatClient.Snapshot instrument=melodies();
+            if(instrument!=null){
+                // Player/Bedrock already receive IM's head channels through the native mixin;
+                // Geo/YSM native heads need the same shared rigid supplement here.
+                Matrix4f delta=instrument.headDelta(PenguinHeadRenderer.headMatrix(f.model),
+                        f.model instanceof GeoMaidView);
+                if(delta!=null)stack.mulPose(delta);
+            }
+        }
     }
     /**
      * Reapplies the complete canonical head transform in the native Gecko frame.
@@ -288,6 +342,16 @@ public final class PenguinRenderContext {
             // Outside the taunt clip (including BLOCK quality) the visible body is the adapter
             // pose, so reset the shared parts and reuse the exact wing ModelPart transform.
             prepareBody(shared);
+        }
+        // Instrument frames only: move the exact lute forward along canonical -Z (entity front)
+        // in this parent frame, before the held renderer applies the rotated item frame. Other
+        // instruments, ordinary weapons and every null-snapshot path add exact zero and therefore
+        // no matrix operation.
+        if(melodies()!=null){
+            float forwardPixels=PenguinMelodiesCompatClient.heldItemForwardPixels(f.entity,arm);
+            if(forwardPixels!=0.0F){
+                stack.translate(0.0F,0.0F,-forwardPixels*profile.bodyScale()/PIXELS_PER_BLOCK);
+            }
         }
         PenguinHeldItemRenderer.apply(stack,profile,animated,shared,arm);
         return true;

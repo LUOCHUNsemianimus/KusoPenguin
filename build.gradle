@@ -79,12 +79,18 @@ dependencies {
     // Optional Gecko4 API for the Iron caster bridge. Compile-only, no jarJar, no runtime
     // requirement in neoforge.mods.toml. The pinned artifact is already in the offline cache.
     compileOnly("maven.modrinth:geckolib:Grwn5rUB") { transitive = false }
+    // Optional Immersive Melodies 0.8.0 instrument-pose API. No jarJar and no mods.toml
+    // dependency; the outer facade links IM classes only when the mod is actually loaded.
+    compileOnly("maven.modrinth:immersive-melodies:RLpigSXC") { transitive = false }
     if (devCompat || withMaid) {
         // runtimeOnly puts the artifact on the dev runtime mod classpath so NeoForge discovers
         // it as a mod; additionalRuntimeClasspath alone only supplied library classes.
         runtimeOnly "maven.modrinth:R0bDWFAW:1.5.3-neoforge+mc1.21.1"
     }
     if (devCompat) {
+        // Optional Immersive Melodies dev-runtime companion for the instrument-pose bridge.
+        // Dev-only: no jarJar, no mods.toml dependency, and absence keeps the old renderer.
+        runtimeOnly("maven.modrinth:immersive-melodies:RLpigSXC") { transitive = false }
         // Pinned local YSM 2.6.5 dev jar. Runtime-only and dev-only: no jarJar, no mods.toml
         // dependency, and a missing file never breaks classes/build.
         runtimeOnly files(devYsmJar)
@@ -138,12 +144,22 @@ tasks.register('runCompatClient', Exec) {
                     "runCompatClient could not resolve the pinned TLM 1.5.3 runtime jar; " +
                     "use -PdevCompat=false or fix the runtime dependency resolution.")
         }
+        // The native launcher does not inherit Gradle's runtimeOnly classpath. Stage the exact
+        // resolved Immersive Melodies Maven artifact explicitly so default devCompat runClient
+        // never depends on a one-time manual copy.
+        def melodiesJar = runtimeJars.find { it.name == 'immersive-melodies-RLpigSXC.jar' }
+        if (melodiesJar == null || !melodiesJar.isFile()) {
+            throw new GradleException(
+                    "runCompatClient could not resolve immersive-melodies-RLpigSXC.jar; " +
+                    "use -PdevCompat=false or fix the optional IM runtime dependency resolution.")
+        }
         commandLine compatPython, compatScript.absolutePath,
                 '--config', compatConfig.absolutePath,
                 '--game-dir', compatGameDir.absolutePath,
                 '--mod-jar', modJar.absolutePath,
                 '--maid-jar', maidJar.absolutePath,
-                '--ysm-jar', devYsmJar.absolutePath
+                '--ysm-jar', devYsmJar.absolutePath,
+                '--melodies-jar', melodiesJar.absolutePath
     }
 }
 
