@@ -1,5 +1,6 @@
 package com.luochun.kusopenguin.mixin;
 import com.luochun.kusopenguin.animation.*;
+import com.luochun.kusopenguin.registry.ModSounds;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.damagesource.DamageSource;
@@ -12,6 +13,7 @@ public abstract class PenguinDeathMixin {
     @Inject(method="die",at=@At("TAIL"))
     private void kusoPenguin$visualDeath(DamageSource source,CallbackInfo ci){
         LivingEntity e=(LivingEntity)(Object)this;
+        ModSounds.playDeath(e);
         if(e.isDeadOrDying()&&!e.isBaby()&&PenguinEntitySupport.isSupportedType(e.getType()))
             PenguinPoseSync.start(e,PenguinAction.DEATH);
     }

@@ -2,7 +2,9 @@ package com.luochun.kusopenguin.animation;
 
 import com.google.common.collect.MapMaker;
 import com.luochun.kusopenguin.KusoPenguin;
+import com.luochun.kusopenguin.compat.MaidKickCompat;
 import com.luochun.kusopenguin.registry.ModEffects;
+import com.luochun.kusopenguin.registry.ModSounds;
 import java.util.*;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -76,9 +78,9 @@ public final class PenguinKick {
         return (float)(amount*settings.damageMultiplier());
     }
     public static boolean tryStart(LivingEntity e){
-        // Maid is eligible for the shared body/taunt/dance/death pose, but must never gain the
-        // hostile auto-kick behaviour or be launched at her owner/target by this path.
-        if(PenguinEntitySupport.isMaid(e.getType()))return false;
+        // Maid is eligible only through the exact optional melee task gate; the ordinary maid
+        // attack override stays blocked by the mixin unless this kick owns the dispatch.
+        if(PenguinEntitySupport.isMaid(e.getType())&&!MaidKickCompat.isEligibleMaid(e))return false;
         if(e instanceof Mob mob && com.luochun.kusopenguin.music.DanceManager.pausesAI(mob))return false;
         if(!(e.level() instanceof ServerLevel)||!e.isAlive()||!e.hasEffect(ModEffects.PENGUIN)
             ||!PenguinEntitySupport.isSupportedType(e.getType())||!e.onGround()||e.isPassenger()
@@ -87,10 +89,13 @@ public final class PenguinKick {
         long sequence=PenguinPoseSync.startKick(e);
         if(sequence==0L)return false;
         Vec3 look=e instanceof Mob m&&m.getTarget()!=null?m.getTarget().position().subtract(e.position()):e.getLookAngle();Vec3 dir=new Vec3(look.x,0,look.z).normalize();
-        double baseDistance=e instanceof Player?4:independentMob(e)?3:1.5,height=e instanceof Player?1:.75;
+        // An eligible maid uses the same approved player-sized leap; mob speed scaling still applies.
+        boolean playerLike=e instanceof Player||PenguinEntitySupport.isMaid(e.getType());
+        double baseDistance=playerLike?4:independentMob(e)?3:1.5,height=playerLike?1:.75;
         double distance=baseDistance*speedScale(e);
         Flight flight=new Flight(e,e.position(),dir,distance,height,sequence);
         FLIGHTS.put(e,flight);
+        ModSounds.playKick(e);
         // The confirmed start intentionally replaces ordinary pre-kick velocity.
         e.setDeltaMovement(Vec3.ZERO);
         e.fallDistance=0;
@@ -244,10 +249,13 @@ public final class PenguinKick {
     }
     
     public static boolean independentMob(LivingEntity e){
-        return e instanceof Mob&&e instanceof net.minecraft.world.entity.monster.Enemy
-            &&e.getType()!=EntityType.IRON_GOLEM&&e.getType()!=EntityType.WARDEN
-            &&PenguinEntitySupport.isSupportedType(e.getType())
-            &&e.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE)!=null;
+        if(!(e instanceof Mob))return false;
+        if(e.getType()==EntityType.IRON_GOLEM||e.getType()==EntityType.WARDEN
+            ||!PenguinEntitySupport.isSupportedType(e.getType())
+            ||e.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE)==null)return false;
+        // Hostile enemies keep their old eligibility; an optional maid joins only while the exact
+        // melee task gate passes. Other friendly mobs remain excluded.
+        return e instanceof net.minecraft.world.entity.monster.Enemy||MaidKickCompat.isEligibleMaid(e);
     }
     public static boolean blockOrdinaryMelee(Mob m){return independentMob(m)&&active(m)&&MOB_STRIKE.get()!=m;}
     @SubscribeEvent public static void choose(EntityTickEvent.Pre event){
@@ -266,6 +274,12 @@ public final class PenguinKick {
             return;
         }
         if(!valid(e,f)){interruptFlight(e,f,false);return;}
+        // A maid's optional gate can change mid-leap: task switch, sit, ally/owner target or a
+        // different current target must stop through the one existing interruption boundary.
+        if(e instanceof Mob maid&&PenguinEntitySupport.isMaid(maid.getType())
+            &&(!MaidKickCompat.isEligibleMaid(maid)||maid.getTarget()!=f.target)){
+            interruptFlight(e,f,false);return;
+        }
         
         if(e instanceof Mob mob){
             LivingEntity target=f.target;

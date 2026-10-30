@@ -13,3 +13,7 @@ Immersive Melodies 兼容（2026-10-28）：可选 `PenguinMelodiesCompatClient`
 灾变扩展调研（2026-10-28）：Ignis／Scylla／Ender Guardian／Netherite Monstrosity 的骨骼、实际 JAR 描述符、材质透明区域与分阶段方案见 `docs/CATACLYSM_BOSS_EXPANSION_RESEARCH.md`。**Scylla 视觉-only 替换已实现**（`docs/SCYLLA_COMPAT.md`，已通过开发环境动作／GPU／无灾变启动检查；肩根修正已获用户观感确认）；**Ender Guardian 视觉-only 替换已实现**（`docs/ENDER_GUARDIAN_COMPAT.md`，开发检查完成，待用户观感验收）；**Netherite Monstrosity 是唯一仍未实现的 Boss**；Ignis 首版见下方更新，不要直接复用 Scylla 路径。工作区 `.workflow/projects/kuso-penguin/work/cataclysm-expansion-20261028/` 保留静态审计证据。后续先核对新 HEAD 与固定版本，再立新卡；不要直接把四者当作 Maledictus 的路径替换。
 
 Ignis 视觉试点（2026-10-28）：原版胖企鹅身体／连接腿脚＋短翼袖，脚踝固定下垂，原生lowerbody2喷火保留，保留完整原生长臂／拳套／剑盾和头；AdvancedModelBox 只读矩阵与祖先保留绘制见 `docs/IGNIS_COMPAT.md`。与 Scylla 一同等待用户实机观感验收。Netherite Monstrosity 仍未实现。腿脚只随身体整体运动，不能采样原生腿动画；不要施加落地修正或 Kuso 自定义动作。
+
+状态更新（2026-10-30）：Ignis 已更新为三段贴腹翼（游戏固定随躯干，BBS 每侧3根辅助骨）（细节见 `docs/IGNIS_COMPAT.md`）；服务端音量与女仆近战飞踢已按 night-20261029 运行证据验证，TLM 守卫为可选路径、无 TLM 时惰性跳过（`docs/MAID_KICK_COMPAT.md`）；玩家自定义舞蹈仅完成可行性研究，未实现上传/解析/播放或任何新 UI，见 `docs/CUSTOM_DANCE_FEASIBILITY.md`。
+
+2026-10-30：IM 提琴 vielle 已增加独立手持前向间距，保留琉特琴及其他乐器行为；玩家/基岩/Gecko/YSM 女仆主副手正侧面已做真实渲染验证，待用户观感确认。女仆弹唱仅调研，未实现，见 `docs/MAID_VOCALS_FEASIBILITY.md`；不能将 `MelodyProgress.isPlaying()` 当作音频生命周期开关。

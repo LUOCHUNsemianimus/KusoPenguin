@@ -343,9 +343,9 @@ public final class PenguinRenderContext {
             // pose, so reset the shared parts and reuse the exact wing ModelPart transform.
             prepareBody(shared);
         }
-        // Instrument frames only: move the exact lute forward along canonical -Z (entity front)
-        // in this parent frame, before the held renderer applies the rotated item frame. Other
-        // instruments, ordinary weapons and every null-snapshot path add exact zero and therefore
+        // Instrument frames only: move the exact lute/vielle forward along canonical -Z (entity
+        // front) in this parent frame, before the held renderer applies the rotated item frame.
+        // Other items, ordinary weapons and every null-snapshot path add exact zero and therefore
         // no matrix operation.
         if(melodies()!=null){
             float forwardPixels=PenguinMelodiesCompatClient.heldItemForwardPixels(f.entity,arm);

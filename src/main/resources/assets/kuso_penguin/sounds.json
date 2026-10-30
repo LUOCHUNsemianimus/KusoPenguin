@@ -6,5 +6,23 @@
         "stream": true
       }
     ]
+  },
+  "flying_kick": {
+    "subtitle": "subtitles.kuso_penguin.flying_kick",
+    "sounds": [
+      {
+        "name": "kuso_penguin:flying_kick",
+        "stream": false
+      }
+    ]
+  },
+  "penguin_death": {
+    "subtitle": "subtitles.kuso_penguin.penguin_death",
+    "sounds": [
+      {
+        "name": "kuso_penguin:penguin_death",
+        "stream": false
+      }
+    ]
   }
 }

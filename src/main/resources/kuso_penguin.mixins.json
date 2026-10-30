@@ -10,6 +10,7 @@
     "PenguinTravelMixin",
     "PenguinContactPushMixin",
     "PenguinDeathMixin",
+    "MaidMeleeAttackMixin",
     "JukeboxMusicMixin",
     "MobDanceMixin",
     "ServerPlayerRevivalMixin",

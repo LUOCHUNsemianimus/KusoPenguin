@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "comment": "Short cuffs stay separate and keep joints 4/7. The original HIGH flipper pair is baked into extra body triangles as a fixed belly-hug: those vertices bind to body joint 1, -Z is the front, and the low roots overlap the belly for shoulder contact. No native arm bone, cuff frame, armor, weapon or AI is touched.",
+  "comment": "Three independent closed belly links per side. Game vertices remain body1-bound; BBS uses canonical face ordinals and pivots. Native cuffs/feet unchanged.",
   "sectors": 12,
   "sleeve_rings": [
     [
@@ -23,14 +23,48 @@
     0.72,
     0.234375
   ],
-  "fixed_belly_wings": {
-    "inward_degrees": 35.0,
-    "forward_degrees": 32.0,
-    "clearance_low": 0.2,
-    "clearance_high": 0.65,
-    "clearance_y_low": 3.5,
-    "clearance_y_high": 5.0,
-    "thickness_center_z": 0.5,
-    "thickness_scale": 0.45
+  "belly_wing_chain": {
+    "schema": 1,
+    "controls": [
+      {
+        "center": [
+          5.45,
+          2.6,
+          0.2
+        ],
+        "width": 0.8,
+        "depth": 0.35
+      },
+      {
+        "center": [
+          7.3,
+          9,
+          -4
+        ],
+        "width": 1.05,
+        "depth": 0.35
+      },
+      {
+        "center": [
+          2.5,
+          10,
+          -5.8
+        ],
+        "width": 0.8,
+        "depth": 0.28
+      },
+      {
+        "center": [
+          0.45,
+          10.8,
+          -6.1
+        ],
+        "width": 0.15,
+        "depth": 0.1
+      }
+    ],
+    "joint_overlap": 0.15,
+    "tip_gap_min": 0.25,
+    "tip_gap_max": 1.0
   }
 }

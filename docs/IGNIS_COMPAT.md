@@ -40,3 +40,6 @@ The native lowerbody2 flame geometry and animated normal/soul textures remain in
 GPU已查看常态及挥剑姿态；新增鳍肢仅随躯干整体运动，不随原生双臂、翼袖骨骼摆动。原版面色与模型保持原样，未新增渲染pass或修改游戏逻辑。此处是无光影开发环境检查，最终抱肚观感待用户确认；不声称全光影／完整自动Boss战覆盖。
 
 The added40 flipper faces passed1588 native action/fallback checks. Across129 animation/phase combinations,24 new points keep the same torso-relative geometry (max error about3.82e-6model pixels). Existing cuffs, feet, original body faces and all production Java code remain unchanged; six actual sword particle sockets match exactly. Idle and swing GPU previews were inspected. User visual acceptance is pending.
+
+
+2026-10-30：新增贴腹翼改为上翼下垂、前翼内收、翼尖贴腹的三段造型；游戏仍固定随躯干，BBS新增每侧三段辅助骨。短翼袖/原生长臂/武器/脚掌映射不改。生成物总620面（body340，袖72×2，脚68×2），详见IGNIS_ARTICULATED_WINGS_PLAN.md。

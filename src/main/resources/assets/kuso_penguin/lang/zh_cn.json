@@ -1,5 +1,7 @@
 {
   "effect.kuso_penguin.penguin": "企鹅",
+  "subtitles.kuso_penguin.flying_kick": "企鹅飞踢",
+  "subtitles.kuso_penguin.penguin_death": "企鹅倒下",
   "item.minecraft.potion.effect.penguin_base": "臭味基底",
   "item.minecraft.splash_potion.effect.penguin_base": "喷溅型臭味基底",
   "item.minecraft.lingering_potion.effect.penguin_base": "滞留型臭味基底",

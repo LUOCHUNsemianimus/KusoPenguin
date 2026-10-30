@@ -35,12 +35,21 @@ public final class PenguinMelodiesCompatClient {
             ResourceLocation.fromNamespaceAndPath("touhou_little_maid", "maid");
     private static final ResourceLocation LUTE_ID =
             ResourceLocation.fromNamespaceAndPath(MOD_ID, "lute");
+    private static final ResourceLocation VIELLE_ID =
+            ResourceLocation.fromNamespaceAndPath(MOD_ID, "vielle");
     /**
      * Authored model-pixel forward clearance for the lute body inside the short, rounded penguin
      * belly. This is a per-item mount offset, not a wing-root move or a body/instrument resize.
      * 8.0F is validated against player/Bedrock/Gecko/YSM main/offhand visuals.
      */
     private static final float LUTE_FORWARD_CLEARANCE_PIXELS = 8.0F;
+    /**
+     * Authored model-pixel forward clearance for the vielle body inside the short, rounded
+     * penguin belly. Same shared canonical mount and units as the lute; 8.0F is checked on player
+     * and Bedrock/Gecko/YSM maid main/offhand native-GUI views without changing the
+     * mount path.
+     */
+    private static final float VIELLE_FORWARD_CLEARANCE_PIXELS = 8.0F;
     private static final boolean AVAILABLE = ModList.get().isLoaded(MOD_ID);
 
     private PenguinMelodiesCompatClient() {
@@ -77,9 +86,10 @@ public final class PenguinMelodiesCompatClient {
      * Authored forward clearance in canonical penguin model pixels for the item actually held in
      * the requested physical arm. Main/offhand is resolved against the entity's main arm, so a
      * left-handed player and a maid use the same physical mapping. Only the exact
-     * {@code immersive_melodies:lute} returns a non-zero value; every other item, including other
-     * IM instruments, returns zero. The selected/leading instrument is deliberately not consulted
-     * because two instruments may coexist in different hands.
+     * {@code immersive_melodies:lute} and {@code immersive_melodies:vielle} return a non-zero
+     * value; every other item, including other IM instruments, returns zero. The selected/leading
+     * instrument is deliberately not consulted because two instruments may coexist in different
+     * hands, so each physical hand resolves only its own stack.
      */
     public static float heldItemForwardPixels(LivingEntity entity, HumanoidArm arm) {
         if (entity == null || arm == null) {
@@ -90,8 +100,14 @@ public final class PenguinMelodiesCompatClient {
         if (stack.isEmpty()) {
             return 0.0F;
         }
-        return LUTE_ID.equals(BuiltInRegistries.ITEM.getKey(stack.getItem()))
-                ? LUTE_FORWARD_CLEARANCE_PIXELS : 0.0F;
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        if (LUTE_ID.equals(id)) {
+            return LUTE_FORWARD_CLEARANCE_PIXELS;
+        }
+        if (VIELLE_ID.equals(id)) {
+            return VIELLE_FORWARD_CLEARANCE_PIXELS;
+        }
+        return 0.0F;
     }
 
     /**

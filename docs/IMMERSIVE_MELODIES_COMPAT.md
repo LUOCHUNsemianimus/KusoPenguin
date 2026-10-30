@@ -92,6 +92,11 @@ The default `runClient` under `devCompat` delegates to the isolated `runCompatCl
 - Runtime GPU review covered the player and all three maid paths (Bedrock/Gecko/YSM), front and side, main and offhand: the full rounded lute body and neck are now visible outside the belly, the side fit was checked, and the normal player reference is unchanged. Screenshots came directly from the native `EntityRenderer` GUI at 854×480; this is a representative visual check, not a claim for arbitrary models or every shader.
 - Matrix comparison across the four dominant left/right main/offhand mappings: at profile .5 the lute deltaZ is -0.25 canonical blocks, and only translation Z changed relative to the old mount; rotations, scales and every other matrix component are bit-identical. Empty hand, flute, weapons, mixed flute-leading and non-lute paths are unaffected.
 
+### Vielle fitting (2026-10-30)
+
+- The same short, rounded penguin belly also occludes the IM `immersive_melodies:vielle` body. The existing shared per-item mount clearance now resolves the exact vielle in the actually requested physical hand and starts with an authored `VIELLE_FORWARD_CLEARANCE_PIXELS = 8.0F` canonical penguin model pixels, using the unchanged shared -Z translation before the rotated item frame. The lute keeps its separately named 8.0F constant. This is one shared-player/maid mount path, not a per-renderer or per-model copy and not a wing-root, pose, item-rotation or scale change.
+- The 8.0F vielle value passed representative native-`EntityRenderer` GPU review on player and maid (front/side, main/offhand, Bedrock/Gecko/YSM). Twelve captures use explicit body/head yaw 0/90 degrees at 854x480, GUI scale2. The GUI first float is vertical offset, not yaw; true side views use the direct inventory renderer with both body/head yaw controlled. Mixed instruments still resolve per physical hand, so the selected/leading instrument does not decide the offset; all other item ids keep an exact zero offset.
+
 ### Priority
 
 Death/detached copy > active unexpired flying kick > Iron casting (including native Gecko caster) > non-standing player posture (crouch, sit, swim, elytra) > Immersive Melodies instrument > penguin dance/taunt. On an instrument frame `isDanceFrame` yields and `pose()` returns `null` for the ordinary prepared mesh. No music is started or stopped.
@@ -115,3 +120,9 @@ Priority/removal: taunt yields while holding and resumes on unequip; an active k
 The earlier 132 draw cases proved vertex emission, not silhouette visibility, and did not catch the old occlusion. The new GPU checks are additional evidence and do not claim all 132 scenes were re-captured. **Manual user aesthetic acceptance remains pending.**
 
 A final absent-IM native client reached the title screen with `Impl` unlinked; the production jar never contains IM. The actual `runClient` offline Gradle argv was tested with only the final JavaExec action replaced; Python staging was tested with/without IM and with a missing jar while only the final Java child was mocked. A separate full native client boot was performed; the mocked launch is not an actual GPU test. Peaceful survival QA saves were cleaned up and all owned clients were stopped. `test NO-SOURCE` means no JUnit suite is claimed. **Manual user aesthetic acceptance remains pending** and is not implied by these checks.
+
+
+Vielle 2026-10-30 verification: old private-client jar was confirmed not to contain VIELLE_ID, then its front baseline reproduced belly occlusion. The new jar was checked with 12 explicit-yaw GPU scenes and 3x44 native draw/regression cases. Physical-hand matrix audit covers four dominant/main/off mappings (deltaZ -0.25 canonical blocks at bodyScale .5), with rotations/scales/pivots unchanged and empty/flute/weapon/mixed-hand isolation. Evidence: `.workflow/projects/kuso-penguin/runtime/vielle-fit-20261030/`. This is representative default-model validation; arbitrary custom models/shaders and vocal playback are not claimed.
+
+
+2026-10-30: 女仆弹唱两种入口的可行性、有效旋律时钟、现有 MP3 后端复用及边界见 [MAID_VOCALS_FEASIBILITY.md](MAID_VOCALS_FEASIBILITY.md)。仅调研，尚未实现。
