@@ -46,6 +46,10 @@
     "IronGeoArmorLayerMixin",
     "IronHumanoidRendererMixin",
     "MinecraftAttackMixin",
+    "MelodyProgressAccessor",
+    "MelodiesVocalScreenMixin",
+    "MelodiesMicrophonePoseMixin",
+    "MelodiesMicrophoneSoundMixin",
     "IgnisShieldLayerMixin",
     "EnderGuardianLayerMixin"
   ],

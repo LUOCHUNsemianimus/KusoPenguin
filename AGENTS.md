@@ -16,4 +16,4 @@ Ignis 视觉试点（2026-10-28）：原版胖企鹅身体／连接腿脚＋短�
 
 状态更新（2026-10-30）：Ignis 已更新为三段贴腹翼（游戏固定随躯干，BBS 每侧3根辅助骨）（细节见 `docs/IGNIS_COMPAT.md`）；服务端音量与女仆近战飞踢已按 night-20261029 运行证据验证，TLM 守卫为可选路径、无 TLM 时惰性跳过（`docs/MAID_KICK_COMPAT.md`）；玩家自定义舞蹈仅完成可行性研究，未实现上传/解析/播放或任何新 UI，见 `docs/CUSTOM_DANCE_FEASIBILITY.md`。
 
-2026-10-30：IM 提琴 vielle 已增加独立手持前向间距，保留琉特琴及其他乐器行为；玩家/基岩/Gecko/YSM 女仆主副手正侧面已做真实渲染验证，待用户观感确认。女仆弹唱仅调研，未实现，见 `docs/MAID_VOCALS_FEASIBILITY.md`；不能将 `MelodyProgress.isPlaying()` 当作音频生命周期开关。
+2026-10-30：IM 提琴 vielle 已增加独立手持前向间距，保留琉特琴及其他乐器行为；玩家/基岩/Gecko/YSM 女仆主副手正侧面已做真实渲染验证，待用户观感确认。独立人声麦克风已实现：服务端绑定/原生组件独立时钟、可选 IM 动画器与持麦静音 mixin、VocalScreen 播放/暂停与音频标题、无 MIDI 与无口型；已通过 IM/无 IM 启动、双客户端人声与女仆播放验证，持麦 GPU 检查已完成、用户观感待验收，见 `docs/VOCALS.md`。普通乐器女仆弹唱已实现并通过实际 MIDI＋人声验证，早期方案见 `docs/MAID_VOCALS_FEASIBILITY.md`；不能将 `MelodyProgress.isPlaying()` 当作音频生命周期开关。

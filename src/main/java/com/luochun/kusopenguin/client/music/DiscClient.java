@@ -1,6 +1,7 @@
 package com.luochun.kusopenguin.client.music;
 
 import com.luochun.kusopenguin.KusoPenguin;
+import com.luochun.kusopenguin.client.vocals.VocalScreens;
 import com.luochun.kusopenguin.music.*;
 import com.luochun.kusopenguin.registry.ModEffects;
 import java.util.*;
@@ -34,10 +35,11 @@ public final class DiscClient implements DiscClientHooks.Listener {
     public static void selected(String id) { selection = id; }
     public static void refresh() { PacketDistributor.sendToServer(new DiscPackets.Request(DiscPackets.Action.LIST, UUID.randomUUID(), "", "", 0)); }
     public static void selectTrack(String id) { PacketDistributor.sendToServer(new DiscPackets.Request(DiscPackets.Action.SELECT, UUID.randomUUID(), id, "", 0)); }
-    @Override public void onReply(DiscPackets.Reply reply) { DiscTransfers.onReply(reply); }
+    @Override public void onReply(DiscPackets.Reply reply) { DiscTransfers.onReply(reply); VocalScreens.onDiscReply(reply); }
     @Override public void onChunk(DiscPackets.Chunk chunk) { DiscTransfers.onChunk(chunk); }
     @Override public void onCatalog(DiscPackets.Catalog catalog) {
         tracks = List.copyOf(catalog.tracks());
+        VocalScreens.onCatalog();
         if (MC.screen instanceof DiscScreen screen) screen.catalogChanged();
         else if (catalog.open()) MC.setScreen(new DiscScreen());
     }

@@ -69,6 +69,8 @@ public final class PenguinKick {
     }
     private PenguinKick(){}
     public static boolean active(LivingEntity e){return FLIGHTS.containsKey(e);}
+    /** Read-only identity check: true only while this exact mob owns the shared MOB_STRIKE call. */
+    public static boolean dispatching(Mob m){return MOB_STRIKE.get()==m;}
     public static boolean dispatching(Player p){return ATTACKER.get()==p;}
     public static void confirmedHit(Player p,boolean hit){if(dispatching(p)&&hit)HIT.set(true);}
     /** Native weapon/enchantment damage, before ordinary armor and resistance handling. */
@@ -283,9 +285,14 @@ public final class PenguinKick {
         
         if(e instanceof Mob mob){
             LivingEntity target=f.target;
+            // Only the approved per-step displacement may form the hit sweep. This keeps a real
+            // kick's short swept segment while a teleport or unresolved external displacement can
+            // never turn the previously visited position into a four-block ghost-hit corridor.
+            Vec3 sweepStep=f.previous.subtract(mob.position());
             if(independentMob(mob)&&target!=null&&target==mob.getTarget()&&target.isAlive()
                 &&!f.hit.contains(target.getUUID())&&!mob.isAlliedTo(target)&&mob.hasLineOfSight(target)
-                &&mob.getBoundingBox().expandTowards(f.previous.subtract(mob.position())).inflate(.35,.15,.35).intersects(target.getBoundingBox())){
+                &&sweepStep.lengthSqr()<=f.maxStepSqr
+                &&mob.getBoundingBox().expandTowards(sweepStep).inflate(.35,.15,.35).intersects(target.getBoundingBox())){
                 MOB_STRIKE.set(mob);
                 boolean hit;
                 try{hit=mob.doHurtTarget(target);}finally{MOB_STRIKE.remove();}

@@ -1,5 +1,6 @@
 package com.luochun.kusopenguin.music;
 
+import com.luochun.kusopenguin.vocals.VocalServer;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -21,6 +22,11 @@ public final class DiscCommands {
             DiscServer.open(player);
             context.getSource().sendSuccess(
                 () -> Component.translatable("commands.kuso_penguin.disc.opened"), false);
+            return 1;
+        }));
+        root.then(Commands.literal("vocals").executes(context -> {
+            ServerPlayer player = context.getSource().getPlayerOrException();
+            VocalServer.open(player);
             return 1;
         }));
     }

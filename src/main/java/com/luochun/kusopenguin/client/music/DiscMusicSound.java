@@ -3,16 +3,11 @@ package com.luochun.kusopenguin.client.music;
 import com.luochun.kusopenguin.music.DiscPackets;
 import com.luochun.kusopenguin.music.MusicItems;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.BooleanSupplier;
-import javax.sound.sampled.AudioFormat;
-import javax.sound.sampled.AudioInputStream;
-import javax.sound.sampled.AudioSystem;
-import javax.sound.sampled.UnsupportedAudioFileException;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.sounds.AbstractTickableSoundInstance;
@@ -84,100 +79,9 @@ public final class DiscMusicSound extends AbstractTickableSoundInstance {
     }
 
     private AudioStream openCachedStream() throws IOException {
-        AudioInputStream stream = null;
-        try {
-            stream = AudioSystem.getAudioInputStream(cacheFile.toFile());
-            AudioFormat format = stream.getFormat();
-            if (!AudioFormat.Encoding.PCM_SIGNED.equals(format.getEncoding())
-                || format.getSampleSizeInBits() != 16 || format.getChannels() != 1
-                || format.isBigEndian()) {
-                throw new IOException("Cached disc is not signed 16-bit little-endian mono PCM");
-            }
-            int rate = Math.round(format.getSampleRate());
-            if (rate < 8000 || rate > 48000) {
-                throw new IOException("Cached disc sample rate is outside 8000-48000 Hz");
-            }
-
-            long totalFrames = stream.getFrameLength();
-            if (totalFrames < 0L) {
-                totalFrames = stream.available() / 2L;
-            }
-            long elapsedTicks = 0L;
-            Level level = Minecraft.getInstance().level;
-            if (level != null) {
-                elapsedTicks = Math.max(0L, level.getGameTime() - source.startedGameTime());
-            }
-            long skipFrames = Math.min(totalFrames, elapsedTicks * rate / 20L);
-            stream.skipNBytes(skipFrames * 2L);
-
-            AudioInputStream result = stream;
-            stream = null;
-            return new CachedWavStream(result);
-        } catch (UnsupportedAudioFileException e) {
-            throw new IOException("Cached disc is not a readable WAV file", e);
-        } finally {
-            if (stream != null) {
-                try {
-                    stream.close();
-                } catch (IOException ignored) {
-                    // The original open/validation failure is the useful error.
-                }
-            }
-        }
-    }
-
-    private static final class CachedWavStream implements AudioStream {
-        private final AudioInputStream stream;
-        private int pendingByte = -1;
-
-        private CachedWavStream(AudioInputStream stream) {
-            this.stream = stream;
-        }
-
-        @Override
-        public AudioFormat getFormat() {
-            return stream.getFormat();
-        }
-
-        @Override
-        public ByteBuffer read(int size) throws IOException {
-            int capacity = size & ~1;
-            if (capacity <= 0) {
-                return ByteBuffer.allocateDirect(0);
-            }
-            int requested = capacity + (pendingByte >= 0 ? 1 : 0);
-            byte[] bytes = new byte[requested];
-            int count = readAligned(bytes, requested);
-            if (count <= 0) {
-                return ByteBuffer.allocateDirect(0);
-            }
-            int usable = count & ~1;
-            ByteBuffer direct = ByteBuffer.allocateDirect(usable);
-            direct.put(bytes, 0, usable);
-            direct.flip();
-            return direct;
-        }
-
-        private int readAligned(byte[] target, int length) throws IOException {
-            int count;
-            if (pendingByte >= 0 && length > 0) {
-                target[0] = (byte) pendingByte;
-                pendingByte = -1;
-                int read = stream.read(target, 1, length - 1);
-                count = read < 0 ? 1 : 1 + read;
-            } else {
-                count = stream.read(target, 0, length);
-            }
-            if (count > 0 && (count & 1) != 0) {
-                pendingByte = target[count - 1] & 0xff;
-                count--;
-            }
-            return count;
-        }
-
-        @Override
-        public void close() throws IOException {
-            stream.close();
-        }
+        Level level = Minecraft.getInstance().level;
+        long elapsedMs = level == null ? 0L
+            : Math.max(0L, level.getGameTime() - source.startedGameTime()) * 50L;
+        return CachedPcmStream.open(cacheFile, elapsedMs);
     }
 }

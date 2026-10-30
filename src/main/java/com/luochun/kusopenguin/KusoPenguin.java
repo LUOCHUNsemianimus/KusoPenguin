@@ -5,6 +5,7 @@ import com.luochun.kusopenguin.registry.ModEffects;
 import com.luochun.kusopenguin.revival.RevivalEntities;
 import com.luochun.kusopenguin.registry.ModPotions;
 import com.luochun.kusopenguin.registry.ModSounds;
+import com.luochun.kusopenguin.vocals.VocalItems;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -17,6 +18,7 @@ public final class KusoPenguin {
         ModEffects.register(modEventBus);
         ModPotions.register(modEventBus);
         MusicItems.register(modEventBus);
+        VocalItems.register(modEventBus);
         ModSounds.register(modEventBus);
         RevivalEntities.register(modEventBus);
         modContainer.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER,
