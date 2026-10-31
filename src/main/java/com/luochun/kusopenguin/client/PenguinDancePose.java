@@ -48,7 +48,30 @@ public final class PenguinDancePose {
     public static PenguinAnimationPose evaluate(double elapsedSeconds, PenguinBodyModel parts,
                                                  EntityModel<?> original,
                                                  PenguinProportions.Profile profile) {
-        return evaluateInternal(elapsedSeconds, parts, original, profile, false);
+        return evaluateInternal(elapsedSeconds, parts, original, profile, false, -1);
+    }
+
+    /**
+     * Forced single builtin style (0 hip, 1 pole, 2 wave). Hip/wave keep the authored five-second
+     * section cadence; pole keeps its continuous clock. Cycle keeps the original five-second style
+     * transitions through {@link #evaluate(double, PenguinBodyModel, EntityModel)}.
+     */
+    public static PenguinAnimationPose evaluateStyle(int style, double elapsedSeconds,
+                                                      PenguinBodyModel parts,
+                                                      EntityModel<?> original,
+                                                      PenguinProportions.Profile profile) {
+        if (style < 0 || style > 2) {
+            return evaluate(elapsedSeconds, parts, original, profile);
+        }
+        return evaluateInternal(elapsedSeconds, parts, original, profile, style == 1, style);
+    }
+
+    public static PenguinAnimationPose evaluateStyle(int style, double elapsedSeconds,
+                                                      PenguinBodyModel parts,
+                                                      EntityModel<?> original) {
+        PenguinProportions.Profile profile = PenguinProportions.forModel(original);
+        return profile == null ? null
+                : evaluateStyle(style, elapsedSeconds, parts, original, profile);
     }
 
     /** Revival channel: forced pole style with one continuous motion clock for the full 8 s. */
@@ -62,14 +85,15 @@ public final class PenguinDancePose {
     public static PenguinAnimationPose evaluatePole(double elapsedSeconds, PenguinBodyModel parts,
                                                      EntityModel<?> original,
                                                      PenguinProportions.Profile profile) {
-        return evaluateInternal(elapsedSeconds, parts, original, profile, true);
+        return evaluateInternal(elapsedSeconds, parts, original, profile, true, 1);
     }
 
     private static PenguinAnimationPose evaluateInternal(double elapsedSeconds,
                                                           PenguinBodyModel parts,
                                                           EntityModel<?> original,
                                                           PenguinProportions.Profile profile,
-                                                          boolean pole) {
+                                                          boolean pole,
+                                                          int forcedStyle) {
         if (!Double.isFinite(elapsedSeconds)) throw new IllegalArgumentException("Non-finite dance clock");
         PenguinAnimationClip bind = PenguinMeshModel.animationClip();
         if (bind == null) return null; // The resource cache has not loaded yet.
@@ -77,12 +101,13 @@ public final class PenguinDancePose {
         double sampledSeconds = Math.floor(elapsedSeconds * DANCE_FPS) / DANCE_FPS;
         // Disc styles keep their real five-second cadence. The revival channel stays on pole
         // (style 1) and uses the continuous elapsed clock, so it never switches at five seconds.
-        int dance = pole ? 1 : danceIndex(sampledSeconds);
+        int dance = forcedStyle >= 0 ? forcedStyle : danceIndex(sampledSeconds);
         // Separate motion clock: the authored 0.5 s hip/wave cycle becomes 1/3 s and the
         // 1 s pole cycle becomes 2/3 s, while disc styles change every five real seconds.
         // Subtract the real style counter, not danceIndex (0..2): modulo 5 makes every style
         // start at phase zero again, instead of accumulating 15 s of phase across style wraps.
         double styleElapsed = pole ? sampledSeconds
+                : forcedStyle >= 0 ? sampledSeconds % 5.0
                 : sampledSeconds - Math.floor(sampledSeconds / 5.0) * 5.0;
         float motionSeconds = (float) (styleElapsed * MOTION_SPEED);
         float cycle = TAU * motionSeconds * (dance == 1 ? 1.0F : 2.0F);

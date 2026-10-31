@@ -14,6 +14,8 @@ Immersive Melodies 兼容（2026-10-28）：可选 `PenguinMelodiesCompatClient`
 
 Ignis 视觉试点（2026-10-28）：原版胖企鹅身体／连接腿脚＋短翼袖，脚踝固定下垂，原生lowerbody2喷火保留，保留完整原生长臂／拳套／剑盾和头；AdvancedModelBox 只读矩阵与祖先保留绘制见 `docs/IGNIS_COMPAT.md`。与 Scylla 一同等待用户实机观感验收。Netherite Monstrosity 仍未实现。腿脚只随身体整体运动，不能采样原生腿动画；不要施加落地修正或 Kuso 自定义动作。
 
-状态更新（2026-10-30）：Ignis 已更新为三段贴腹翼（游戏固定随躯干，BBS 每侧3根辅助骨）（细节见 `docs/IGNIS_COMPAT.md`）；服务端音量与女仆近战飞踢已按 night-20261029 运行证据验证，TLM 守卫为可选路径、无 TLM 时惰性跳过（`docs/MAID_KICK_COMPAT.md`）；玩家自定义舞蹈仅完成可行性研究，未实现上传/解析/播放或任何新 UI，见 `docs/CUSTOM_DANCE_FEASIBILITY.md`。
+状态更新（2026-10-30）：Ignis 已更新为三段贴腹翼（游戏固定随躯干，BBS 每侧3根辅助骨）（细节见 `docs/IGNIS_COMPAT.md`）；服务端音量与女仆近战飞踢已按 night-20261029 运行证据验证，TLM 守卫为可选路径、无 TLM 时惰性跳过（`docs/MAID_KICK_COMPAT.md`）；玩家自定义舞蹈已于 2026-10-31 实现，当前入口与支持范围见 `docs/CUSTOM_DANCES.md`；`docs/CUSTOM_DANCE_FEASIBILITY.md` 保留为早期研究。
 
 2026-10-30：IM 提琴 vielle 已增加独立手持前向间距，保留琉特琴及其他乐器行为；玩家/基岩/Gecko/YSM 女仆主副手正侧面已做真实渲染验证，待用户观感确认。独立人声麦克风已实现：服务端绑定/原生组件独立时钟、可选 IM 动画器与持麦静音 mixin、VocalScreen 播放/暂停与音频标题、无 MIDI 与无口型；已通过 IM/无 IM 启动、双客户端人声与女仆播放验证，持麦 GPU 检查已完成、用户观感待验收，见 `docs/VOCALS.md`。普通乐器女仆弹唱已实现并通过实际 MIDI＋人声验证，早期方案见 `docs/MAID_VOCALS_FEASIBILITY.md`；不能将 `MelodyProgress.isPlaying()` 当作音频生命周期开关。
+
+2026-10-31：玩家自定义舞蹈 UI/快捷入口已实现。K 键优先级为手持女仆胶片 → 有效尸体复活 → 有企鹅效果时打开 8 扇形舞蹈轮盘（无效果不开始）；轮盘目标为 4 格内准星女仆或自己，中心 Stop、Manage 打开管理、Esc 关闭。8 个独立快捷键默认未绑定（vanilla options 持久化），空槽只在本地提示；所有播放/停止仍走既有服务端 Control 校验，不能绕过复活或其他 source 层。管理界面显示 trigger/槽位当前动作名，重建时保留路径/标题，ResetDefaults 使用 `Prefs.defaults()`（hip/pole/wave/cycle + 空槽）。预览改为 detached client-only RemotePlayer＋企鹅效果的 `DancePreviewScreen`，经 `PenguinRenderContext.pushPreview` ThreadLocal 覆盖并 finally 关闭，复用同一 `PenguinAnimationPose`/内置程序姿态，不注册世界、不改真实玩家/女仆、不发预览网络包。`MelodiesDanceCompat.maidOwner` 已由独立 TLM lazily nested `MaidImpl` 提供，IM 门禁只用于演奏查询；`Source.priority()` 是复活优先级唯一来源，枚举 wire 顺序不变。详见 `docs/CUSTOM_DANCES.md`。

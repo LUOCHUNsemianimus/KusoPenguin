@@ -58,6 +58,42 @@ public final class RevivalManager {
     private static final int PROGRESS_INTERVAL = 20;
     private static final int RECREATE_RETRY_TICKS = 20;
     private static final Map<MinecraftServer, ServerState> STATES = new HashMap<>();
+    private static volatile DanceHook danceHook;
+
+    /**
+     * Narrow visual hook for the shared dance actor manager. It is called only at real channel
+     * starts and at every cancellation/completion; it never infers success from an animation or a
+     * clip duration and never changes the channel's timing, film, loot or health rules.
+     */
+    public interface DanceHook {
+        void onRevivalStart(ServerPlayer caster, long startTick, int session);
+        void onRevivalEnd(ServerPlayer caster, int session);
+    }
+
+    public static void installDanceHook(DanceHook hook) {
+        danceHook = hook;
+    }
+
+    /** True while the caster owns either the player channel or the held-film channel. */
+    public static boolean isChanneling(ServerPlayer player) {
+        ServerState state = player == null ? null : stateOrNull(player.getServer());
+        return state != null && (state.channels.containsKey(player.getUUID())
+                || state.filmChannels.containsKey(player.getUUID()));
+    }
+
+    private static void danceStart(ServerPlayer caster, long startTick, int session) {
+        DanceHook hook = danceHook;
+        if (hook != null) {
+            hook.onRevivalStart(caster, startTick, session);
+        }
+    }
+
+    private static void danceEnd(ServerPlayer caster, int session) {
+        DanceHook hook = danceHook;
+        if (hook != null) {
+            hook.onRevivalEnd(caster, session);
+        }
+    }
 
     /** A dead player's marker record; the token survives marker chunk-unload recreation. */
     private static final class CorpseRecord {
@@ -351,6 +387,7 @@ public final class RevivalManager {
         FilmChannel channel = new FilmChannel(level, caster, token, film, caster.position(), now,
                 state.nextSession++);
         state.filmChannels.put(caster.getUUID(), channel);
+        danceStart(caster, channel.startTick, channel.session);
         PacketDistributor.sendToPlayersTrackingEntityAndSelf(caster, filmPacket(channel, true));
         caster.displayClientMessage(
                 Component.translatable("message.kuso_penguin.revival.film_started"), true);
@@ -437,6 +474,7 @@ public final class RevivalManager {
     private static void start(ServerState state, Channel channel) {
         state.channels.put(channel.caster.getUUID(), channel);
         state.reservations.put(channel.targetKey, channel);
+        danceStart(channel.caster, channel.startTick, channel.session);
         PacketDistributor.sendToPlayersTrackingEntityAndSelf(channel.caster, packet(channel, true));
         channel.caster.displayClientMessage(
                 Component.translatable("message.kuso_penguin.revival.started"), true);
@@ -502,6 +540,7 @@ public final class RevivalManager {
             return;
         }
         state.filmChannels.remove(channel.caster.getUUID(), channel);
+        danceEnd(channel.caster, channel.session);
         PacketDistributor.sendToPlayersTrackingEntityAndSelf(channel.caster, filmPacket(channel, false));
         channel.caster.displayClientMessage(
                 Component.translatable("message.kuso_penguin.revival.film_success"), true);
@@ -532,6 +571,7 @@ public final class RevivalManager {
         }
         state.channels.remove(channel.caster.getUUID(), channel);
         state.reservations.remove(channel.targetKey, channel);
+        danceEnd(channel.caster, channel.session);
         PacketDistributor.sendToPlayersTrackingEntityAndSelf(channel.caster, packet(channel, false));
         state.pendingRespawns.put(target.getUUID(), transition);
         ServerPlayer revived;
@@ -562,6 +602,7 @@ public final class RevivalManager {
             return;
         }
         state.reservations.remove(channel.targetKey, channel);
+        danceEnd(channel.caster, channel.session);
         if (channel.caster.connection != null) {
             PacketDistributor.sendToPlayersTrackingEntityAndSelf(channel.caster, packet(channel, false));
         }
@@ -575,6 +616,7 @@ public final class RevivalManager {
         if (!state.filmChannels.remove(channel.caster.getUUID(), channel)) {
             return;
         }
+        danceEnd(channel.caster, channel.session);
         if (channel.caster.connection != null) {
             PacketDistributor.sendToPlayersTrackingEntityAndSelf(channel.caster,
                     filmPacket(channel, false));

@@ -3,6 +3,8 @@ package com.luochun.kusopenguin.music;
 import com.luochun.kusopenguin.KusoPenguin;
 import com.luochun.kusopenguin.animation.PenguinEntitySupport;
 import com.luochun.kusopenguin.animation.PenguinKick;
+import com.luochun.kusopenguin.compat.MelodiesDanceCompat;
+import com.luochun.kusopenguin.dance.DancePlaybackManager;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.animal.Cat;
 import net.minecraft.world.entity.Pose;
@@ -44,7 +46,32 @@ public final class DanceManager {
         }
     }
     private static final Map<MinecraftServer, Map<UUID, Participant>> SERVERS = new HashMap<>();
+    private static volatile Hook hook;
     private DanceManager() {}
+
+    /**
+     * Narrow bridge for the next actor manager. It receives one start/stop per actual jukebox
+     * membership change and never replaces the existing Disc.Dance broadcast.
+     */
+    public interface Hook {
+        void onDanceStart(LivingEntity entity, MusicSessions.Session session, UUID prefsOwner);
+        void onDanceStop(LivingEntity entity, MusicSessions.Session session, UUID prefsOwner);
+    }
+
+    public static void installHook(Hook next) {
+        hook = next;
+    }
+
+    /**
+     * Clip-preference owner for one jukebox participant: the player itself, the owning player of
+     * an exact TLM maid, or the uploaded track owner for a wild mob.
+     */
+    public static UUID preferenceOwner(LivingEntity entity, MusicSessions.Session session) {
+        if (entity instanceof Player player) return player.getUUID();
+        UUID maidOwner = MelodiesDanceCompat.maidOwner(entity);
+        if (maidOwner != null) return maidOwner;
+        return session == null ? null : session.track.owner();
+    }
 
     private static boolean eligible(LivingEntity entity) {
         return entity.isAlive() && !entity.isBaby() && entity.hasEffect(ModEffects.PENGUIN)
@@ -53,11 +80,20 @@ public final class DanceManager {
                 && !entity.isPassenger() && !entity.isSwimming() && !entity.isFallFlying()
                 && !entity.hasPose(Pose.SITTING)
                 && !(entity instanceof TamableAnimal tame && tame.isInSittingPose())
-                && !(entity instanceof Cat cat && cat.isLying());
+                && !(entity instanceof Cat cat && cat.isLying())
+                // An actual instrument performance outranks the jukebox; a paused held instrument
+                // has no PLAYING flag and may still dance.
+                && !MelodiesDanceCompat.playingInstrument(entity)
+                // A manual/maid-music dancer is owned by the new actor map and must not also be
+                // navigated into the jukebox ring.
+                && !DancePlaybackManager.ownsTransientAI(entity);
     }
 
     /** Consulted immediately before native serverAiStep so effect loss cannot leave AI paused. */
     public static boolean pausesAI(Mob mob) {
+        // The new actor map owns its own transient pause and does not rely on the jukebox
+        // eligibility predicate (which deliberately excludes those actors from the circle).
+        if (DancePlaybackManager.pausesAI(mob)) return true;
         if (!(mob.level() instanceof ServerLevel level) || !eligible(mob)) return false;
         Map<UUID, Participant> members = SERVERS.get(level.getServer());
         Participant participant = members == null ? null : members.get(mob.getUUID());
@@ -156,6 +192,11 @@ public final class DanceManager {
     }
     private static void publish(Participant p, boolean playing) {
         PacketDistributor.sendToPlayersTrackingEntityAndSelf(p.entity, packet(p, playing));
+        Hook listener = hook;
+        if (listener == null) return;
+        UUID prefsOwner = preferenceOwner(p.entity, p.session);
+        if (playing) listener.onDanceStart(p.entity, p.session, prefsOwner);
+        else listener.onDanceStop(p.entity, p.session, prefsOwner);
     }
     private static void release(Participant p) {
         if (p.entity instanceof Mob mob) {

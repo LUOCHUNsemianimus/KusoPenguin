@@ -7,6 +7,10 @@ import com.luochun.kusopenguin.client.compat.IronCastingCompatClient;
 import com.luochun.kusopenguin.client.compat.NativeCastingView;
 import com.luochun.kusopenguin.client.compat.PenguinMelodiesCompatClient;
 import com.luochun.kusopenguin.client.compat.YsmCompatClient;
+import com.luochun.kusopenguin.client.dance.DanceClient;
+import com.luochun.kusopenguin.compat.MelodiesDanceCompat;
+import com.luochun.kusopenguin.dance.DanceLibrary;
+import com.luochun.kusopenguin.dance.Source;
 import java.util.ArrayDeque;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.player.AbstractClientPlayer;
@@ -17,8 +21,16 @@ import org.joml.Matrix4f;
 /** Nestable render scope: all head/body/decorative passes share one evaluated entity pose. */
 public final class PenguinRenderContext {
     private static final ThreadLocal<ArrayDeque<Frame>> FRAMES=ThreadLocal.withInitial(ArrayDeque::new);
+    private static final ThreadLocal<PreviewFrame> PREVIEW=new ThreadLocal<>();
     private static PenguinBodyModel shared;
     private static final float PIXELS_PER_BLOCK=16.0F;
+    private record PreviewFrame(LivingEntity entity,String clipId,PenguinAnimationClip clip,float age){}
+    /** Caller-owned preview scope: push before the detached draw, close in a finally block. */
+    public static final class PreviewScope implements AutoCloseable {
+        private final PreviewFrame previous;
+        private PreviewScope(PreviewFrame previous){this.previous=previous;}
+        @Override public void close(){if(previous==null)PREVIEW.remove();else PREVIEW.set(previous);}
+    }
     private static final class Frame {
         final LivingEntity entity;final EntityModel<?> model;final float partial;
         boolean evaluated;PenguinAnimationPose pose;
@@ -38,6 +50,19 @@ public final class PenguinRenderContext {
     }
     public static void push(LivingEntity entity,EntityModel<?> model,float partial){FRAMES.get().push(new Frame(entity,model,partial));}
     public static void pop(){ArrayDeque<Frame> frames=FRAMES.get();frames.pop();if(frames.isEmpty())FRAMES.remove();}
+    /**
+     * Scoped client-only preview override. The detached entity and clip are visible only to the
+     * current thread/draw; the ordinary dance selection below this scope is unchanged.
+     */
+    public static PreviewScope pushPreview(LivingEntity entity,String clipId,PenguinAnimationClip clip,float age){
+        PreviewFrame previous=PREVIEW.get();
+        PREVIEW.set(new PreviewFrame(entity,clipId,clip,age));
+        return new PreviewScope(previous);
+    }
+    private static PreviewFrame previewFrame(LivingEntity entity){
+        PreviewFrame preview=PREVIEW.get();
+        return preview!=null&&preview.entity==entity?preview:null;
+    }
     static PenguinPlayerPosture posture(){
         Frame f=FRAMES.get().peek();if(f==null)return null;
         if(f.postureEvaluated)return f.posture;f.postureEvaluated=true;
@@ -51,6 +76,9 @@ public final class PenguinRenderContext {
         if(f==null||f.entity!=entity)return false;
         if(f.danceEvaluated)return f.dancing;
         f.danceEvaluated=true;
+        // Detached preview shares the viewer's skin/profile UUID, not their live action state.
+        if(previewFrame(entity)!=null)return f.dancing=PenguinMeshPreview.isEnabled()
+                &&PenguinRenderSupport.shouldReplace(entity);
         // Sample the optional Iron casting gate before the dance decision. While the Iron layer
         // (including its fade) is active, casting owns the pose, so the music dance must not also
         // claim the draw and prepareBody must still run the adapter/posture corrections.
@@ -64,9 +92,14 @@ public final class PenguinRenderContext {
         // A live instrument-holding snapshot outranks the optional dance/taunt rig. The snapshot
         // owns the wing pose and, for Geo/YSM, the supplemental head delta for this frame.
         if(activeFlyingKick(f))return false;
-        if(melodies()!=null)return false;
+        // Only an actually PLAYING instrument blocks an explicit dance. A merely held/paused
+        // instrument keeps its ordinary idle pose when there is no dance, but must not hide an
+        // authoritative manual/maid-music/jukebox/revival selection.
+        if(MelodiesDanceCompat.playingInstrument(f.entity))return false;
+        boolean preview=previewFrame(entity)!=null;
         boolean revival=com.luochun.kusopenguin.client.revival.RevivalClientState.pole(entity);
-        if(!revival&&!com.luochun.kusopenguin.client.music.DiscClient.dancing(entity))return false;
+        if(!preview&&!revival&&!com.luochun.kusopenguin.client.music.DiscClient.dancing(entity)
+                &&!DanceClient.dancing(entity))return false;
         PenguinPlayerPosture p=posture();
         return f.dancing=p==null||!p.suppressesSpecialClips();
     }
@@ -188,7 +221,34 @@ public final class PenguinRenderContext {
         // Instrument arm angles are deliberately applied after adapter/posture corrections so the
         // snapshot owns only the wing rotations and never disturbs prepared pivots or scales.
         PenguinMelodiesCompatClient.Snapshot instrument=melodies();
-        if(instrument!=null)instrument.applyTo(penguin);
+        if(instrument!=null){
+            instrument.applyTo(penguin);
+            alignPerformingMaid(penguin,f);
+        }
+    }
+    /**
+     * Maid models may animate the head locator through parents or head-local translation.
+     * Our adapters copy local limb values, whereas the retained head walks that complete chain.
+     * Anchor the whole prepared assembly to its live neck, in the same canonical block frame.
+     * Subtract the already-adapted body offset before converting to penguin pixels: otherwise
+     * body bob would be applied twice. Rotations remain native/IM-owned, not inferred from pitch.
+     * Body and both hand mounts call prepareBody, so they receive this identical correction.
+     */
+    private static void alignPerformingMaid(PenguinBodyModel penguin,Frame f){
+        if(!net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(f.entity.getType())
+                .equals(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("touhou_little_maid","maid")))return;
+        PenguinProportions.Profile profile=profile(f.model);
+        if(profile==null)return;
+        Matrix4f head=PenguinHeadRenderer.headMatrix(f.model);
+        float scale=profile.bodyScale();
+        net.minecraft.client.model.geom.ModelPart body=penguin.body();
+        float dx=head.m30()*16/scale-body.x;
+        float dy=(head.m31()-profile.bodyOffsetBlocks())*16/scale-body.y;
+        float dz=head.m32()*16/scale-body.z;
+        for(net.minecraft.client.model.geom.ModelPart part:new net.minecraft.client.model.geom.ModelPart[]{
+                body,penguin.rightWing(),penguin.leftWing(),penguin.rightFoot(),penguin.leftFoot()}){
+            part.x+=dx;part.y+=dy;part.z+=dz;
+        }
     }
     /**
      * Additional translation from the penguin body origin to the rounded upper back, in penguin
@@ -245,11 +305,7 @@ public final class PenguinRenderContext {
         // posture/profile lookup inside melodies() cannot re-enter an undecided dance frame.
         if(isDanceFrame(f.entity)){
             prepareBody(shared);
-            f.pose=com.luochun.kusopenguin.client.revival.RevivalClientState.pole(f.entity)
-                    ?PenguinDancePose.evaluatePole(
-                            com.luochun.kusopenguin.client.revival.RevivalClientState.elapsed(f.entity,f.partial),
-                            shared,f.model,profile(f.model))
-                    :PenguinDancePose.evaluate(com.luochun.kusopenguin.client.music.DiscClient.danceElapsed(f.entity,f.partial),shared,f.model,profile(f.model));
+            f.pose=dancePose(f);
             return f.pose;
         }
         // Instrument holding is an ordinary prepared mesh draw, not a taunt/dance/action pose.
@@ -278,6 +334,84 @@ public final class PenguinRenderContext {
         PenguinPoseAdapter adapter=PenguinPoseAdapters.find(f.model);if(adapter==null)return null;
         prepareBody(shared);
         f.pose=PenguinAnimationPose.evaluate(action,clip,sample,shared,f.model);return f.pose;
+    }
+    /**
+     * Single dance selection entry shared by players, prone animals and all three maid paths.
+     * Revival remains the authoritative client gate and outranks every new selection; death, kick,
+     * casting, actual performance and non-standing posture were already rejected by
+     * {@link #isDanceFrame(LivingEntity)}.
+     */
+    private static PenguinAnimationPose dancePose(Frame f){
+        PenguinProportions.Profile profile=profile(f.model);
+        PreviewFrame preview=previewFrame(f.entity);
+        if(preview!=null)return previewPose(preview,f,profile);
+        if(com.luochun.kusopenguin.client.revival.RevivalClientState.pole(f.entity)){
+            PenguinAnimationPose custom=playbackPose(f,Source.REVIVAL);
+            if(custom!=null)return custom;
+            return PenguinDancePose.evaluatePole(
+                    com.luochun.kusopenguin.client.revival.RevivalClientState.elapsed(f.entity,f.partial),
+                    shared,f.model,profile);
+        }
+        String clipId=DanceClient.clip(f.entity);
+        if(clipId!=null){
+            float elapsed=DanceClient.elapsed(f.entity,f.partial);
+            if(DanceLibrary.isBuiltin(clipId)){
+                int style=builtinStyle(clipId);
+                return style<0
+                        ?PenguinDancePose.evaluate(elapsed,shared,f.model,profile)
+                        :PenguinDancePose.evaluateStyle(style,elapsed,shared,f.model,profile);
+            }
+            PenguinAnimationPose custom=playbackClip(f,clipId,elapsed);
+            if(custom!=null)return custom;
+        }
+        // Legacy fallback for a Disc.Dance membership whose new Playback has not arrived yet.
+        return PenguinDancePose.evaluate(
+                com.luochun.kusopenguin.client.music.DiscClient.danceElapsed(f.entity,f.partial),
+                shared,f.model,profile);
+    }
+    /** Preview uses exactly the same builtin/penguin-clip evaluators as authoritative playback. */
+    private static PenguinAnimationPose previewPose(PreviewFrame preview,Frame f,
+                                                     PenguinProportions.Profile profile){
+        String clipId=preview.clipId();
+        float age=preview.age();
+        if(DanceLibrary.isBuiltin(clipId)){
+            int style=builtinStyle(clipId);
+            return style<0
+                    ?PenguinDancePose.evaluate(age,shared,f.model,profile)
+                    :PenguinDancePose.evaluateStyle(style,age,shared,f.model,profile);
+        }
+        PenguinAnimationClip clip=preview.clip();
+        if(clip==null)return null;
+        float duration=clip.totalDuration();
+        if(!(duration>0.0F)||!Float.isFinite(age))return null;
+        float wrapped=age%duration;
+        if(wrapped<0.0F)wrapped+=duration;
+        PenguinAnimationClip.Sample sample=clip.sample(wrapped);
+        if(sample.weight()<=0.0F)return null;
+        return PenguinAnimationPose.evaluate(PenguinAction.TAUNT,clip,sample,shared,f.model);
+    }
+    private static PenguinAnimationPose playbackPose(Frame f,Source source){
+        if(!DanceClient.active(f.entity,source))return null;
+        return playbackClip(f,DanceClient.clip(f.entity),DanceClient.elapsed(f.entity,f.partial));
+    }
+    /** Uploaded clips reuse the fixed 16-joint evaluate path and loop on the total duration. */
+    private static PenguinAnimationPose playbackClip(Frame f,String clipId,float elapsed){
+        if(clipId==null||clipId.isEmpty()||DanceLibrary.isBuiltin(clipId))return null;
+        PenguinAnimationClip clip=DanceClient.cachedClip(clipId);
+        if(clip==null)return null;
+        float duration=clip.totalDuration();
+        if(!(duration>0.0F)||!Float.isFinite(elapsed))return null;
+        float age=elapsed%duration;
+        if(age<0.0F)age+=duration;
+        PenguinAnimationClip.Sample sample=clip.sample(age);
+        if(sample.weight()<=0.0F)return null;
+        return PenguinAnimationPose.evaluate(PenguinAction.TAUNT,clip,sample,shared,f.model);
+    }
+    private static int builtinStyle(String clipId){
+        if(DanceLibrary.BUILTIN_HIP.equals(clipId))return 0;
+        if(DanceLibrary.BUILTIN_POLE.equals(clipId))return 1;
+        if(DanceLibrary.BUILTIN_WAVE.equals(clipId))return 2;
+        return -1; // builtin:cycle keeps the original five-second style transitions.
     }
     public static void applyHead(PoseStack stack){
         Frame f=FRAMES.get().peek();

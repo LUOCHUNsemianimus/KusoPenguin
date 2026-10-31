@@ -42,7 +42,7 @@ public final class PenguinAnimationClip {
     }
     private static float smooth(float t){t=Math.max(0,Math.min(1,t));return t*t*(3-2*t);}
     /** Every action must share exactly the same joint names, parents and bind pivots as Taunt. */
-    boolean sameRigAs(PenguinAnimationClip other){
+    public boolean sameRigAs(PenguinAnimationClip other){
         if(other==null||bind.length!=other.bind.length)return false;
         for(int i=0;i<bind.length;i++)if(bind[i].distanceSquared(other.bind[i])>1.0E-8F)return false;
         return true;

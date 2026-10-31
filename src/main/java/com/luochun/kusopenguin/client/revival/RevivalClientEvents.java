@@ -2,6 +2,7 @@ package com.luochun.kusopenguin.client.revival;
 
 import com.luochun.kusopenguin.KusoPenguin;
 import com.luochun.kusopenguin.client.PenguinDeathClient;
+import com.luochun.kusopenguin.client.dance.DanceClient;
 import com.luochun.kusopenguin.registry.ModEffects;
 import java.util.UUID;
 import net.minecraft.client.Minecraft;
@@ -70,9 +71,12 @@ public final class RevivalClientEvents {
         UUID target = RevivalClient.findTarget();
         if (target != null) {
             RevivalClient.sendRequest(target);
-        } else {
-            minecraft.player.displayClientMessage(
-                    Component.translatable("message.kuso_penguin.revival.no_target"), true);
+            return;
+        }
+        // Film and a valid corpse keep their original paths. With the penguin effect the same
+        // press falls through to the quick dance wheel; without it K must not start a dance.
+        if (minecraft.player.hasEffect(ModEffects.PENGUIN)) {
+            DanceClient.openWheel();
         }
     }
 

@@ -126,3 +126,5 @@ Vielle 2026-10-30 verification: old private-client jar was confirmed not to cont
 
 
 2026-10-30: 女仆弹唱两种入口的可行性、有效旋律时钟、现有 MP3 后端复用及边界见 [MAID_VOCALS_FEASIBILITY.md](MAID_VOCALS_FEASIBILITY.md)。仅调研，尚未实现。
+
+2026-10-31：演奏中的女仆以完整原生头部链的颈部锚点校正五个企鹅部件的共同平移，扣除已复制的身体位移，避免双重摇晃。头部角度、乐器姿势和原生时钟不变；玩家不进入该校正。已用基岩／Gecko／YSM、四种乐器和三个时刻的 36 次实际绘制核验颈部锚点；主观观感待用户确认。
