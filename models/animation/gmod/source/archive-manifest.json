@@ -1,0 +1,108 @@
+{
+  "schema": 1,
+  "purpose": "Offline reproducibility and PUBG archive; runtime loads only the exported JSON clips, never these SMD/bind files. Checked-in copies were verified byte-for-byte against D:\\Moddevelop\\exports\\gmod-dance-sources-20261101\\animations\\manifest.json.",
+  "source_origin": "D:\\Moddevelop\\exports\\gmod-dance-sources-20261101",
+  "source_manifest": "animations/manifest.json",
+  "archive_scope": "Only files required to reproduce the two enabled dances plus the future-only PUBG pair are checked in. The extraction manifest retains provenance for the female Spooky/GetDown and last2s crops that were not copied.",
+  "coordinate_system": "Source ValveBiped: forward -Y, up +Z, right -X. Penguin: forward -Z, up -Y (model +Y down), right +X. Export basis C=(-sourceX,-sourceZ,+sourceY), det=-1 reflection; rotations use C R C^-1 and quaternion vector part (x,z,-y).",
+  "binds": [
+    {
+      "file": "add_taunt-male-bind.json",
+      "sha256": "bb1a148107c1d9b405c89f56b5a062b3e6a66f5aced9f0239a2e86455b4bbce1",
+      "bones": 56,
+      "role": "pole rest bind"
+    },
+    {
+      "file": "add_mmd-male-bind.json",
+      "sha256": "b4eb8ea76411b6b03bcd76d4b4e67d066e79713d8d8452c73e9ae47cd8072ec8",
+      "bones": 56,
+      "role": "hip rest bind"
+    },
+    {
+      "file": "add_pubg-male-bind.json",
+      "sha256": "5d00bd5b5981be9e4e64cb67b9ea636f7ea4ab02ce0936665fe1cfbf4da96428",
+      "bones": 56,
+      "role": "PUBG future-only rest bind"
+    }
+  ],
+  "files": [
+    {
+      "file": "animations/Amod_AM4_Spooky_Month_Dance_male.smd",
+      "sha256": "01bc242f9a8ce7452662fa1cbfacdae11d4f4b7fe8565908d10bed0dc03d3216",
+      "runtime_status": "enabled_pole",
+      "source_mdl": "D:\\SteamLibrary\\steamapps\\workshop\\content\\4000\\2538387266\\2538387266_via_crowbar\\models\\player\\ani_am4\\add_taunt\\anim_m_03.mdl",
+      "source_mdl_sha256": "71fda46c231de87b17de4b2451a21c396ac22e1665300fed7c54423bbe4988b0",
+      "source_ani_sha256": "03a46b5bf3418c96dba08bcf2e990f53ed032f962de06334bdb9685e7c7e2f46",
+      "sequence": "Amod_AM4_Spooky_Month_Dance",
+      "source_frames": 10,
+      "fps": 30.0,
+      "duration_seconds": 0.3,
+      "bind": "add_taunt-male-bind.json",
+      "exported_clip": "src/main/resources/assets/kuso_penguin/animations/dance_pole.json",
+      "note": "10 original frames at 30 fps, runtime rate 0.8, plus an explicit repeat of frame 0 at 10/30 s to close the loop."
+    },
+    {
+      "file": "animations/Amod_MMD_GetDown_male.smd",
+      "sha256": "11478f245a553d334cb1a45bda05652abe327ff9123fc33cf9f00d8105594d9d",
+      "runtime_status": "enabled_hip_source",
+      "source_mdl": "D:\\SteamLibrary\\steamapps\\workshop\\content\\4000\\2538387266\\2538387266_via_crowbar\\models\\player\\ani_am4\\add_mmd\\anim_m_03.mdl",
+      "source_mdl_sha256": "aa9c104afc6ceab31661de9a88295633d09b247440d9656e35cd794aee987c1d",
+      "source_ani_sha256": "cb030f6002dbc75cbcc5402f9591c3b591c94ad07b6a701e43d1143a752120fd",
+      "sequence": "Amod_MMD_GetDown",
+      "source_frames": 1198,
+      "fps": 30.0,
+      "duration_seconds": 39.9,
+      "bind": "add_mmd-male-bind.json",
+      "exported_clip": "src/main/resources/assets/kuso_penguin/animations/dance_hip.json",
+      "selected_source_frame_range": [885, 899],
+      "selected_source_samples": 15,
+      "rejected_source_frame_range": [1167, 1182],
+      "note": "Full male source retained. The exporter selects 885..899 (15 samples, 0.4666667 s, rate 1.0); 1167..1182 is rejected because pelvis/spine/legs are static there."
+    },
+    {
+      "file": "animations/Amod_MMD_GetDown_male_885_899.smd",
+      "sha256": "1a951b341ed3e0bcc6372e162b47ba07140ad0ec91015d02d73d06408e89026a",
+      "runtime_status": "artist_reference_crop",
+      "source_file": "animations/Amod_MMD_GetDown_male.smd",
+      "source_mdl": "D:\\SteamLibrary\\steamapps\\workshop\\content\\4000\\2538387266\\2538387266_via_crowbar\\models\\player\\ani_am4\\add_mmd\\anim_m_03.mdl",
+      "source_mdl_sha256": "aa9c104afc6ceab31661de9a88295633d09b247440d9656e35cd794aee987c1d",
+      "source_ani_sha256": "cb030f6002dbc75cbcc5402f9591c3b591c94ad07b6a701e43d1143a752120fd",
+      "first_source_frame": 885,
+      "last_source_frame": 899,
+      "source_frames": 15,
+      "reindexed_time_range": [0, 14],
+      "fps": 30.0,
+      "duration_seconds": 0.4666666666666667,
+      "exact_source_sample_values": true,
+      "note": "Raw source sample lines cropped and reindexed for artist reuse. Not read by the exporter; the exporter still reads the full 1198-frame source."
+    },
+    {
+      "file": "animations/Amod_PUBG_2PhutHon_male.smd",
+      "sha256": "576bca037609835094716a7791a0f93db0196c54e0c729a9c3088c236f4ce178",
+      "runtime_status": "future_only_not_enabled",
+      "source_mdl": "D:\\SteamLibrary\\steamapps\\workshop\\content\\4000\\2538387266\\2538387266_via_crowbar\\models\\player\\ani_am4\\add_pubg\\anim_m_01.mdl",
+      "source_mdl_sha256": "81ef7389753d9e47e79a4bfafbbd59ad043c17844f2e5ea97ed055edc8df030f",
+      "source_ani_sha256": "15497d3a631e625abd8a6dfb143f58186e8ebdd4d58b46794b74fda0b81234bb",
+      "sequence": "Amod_PUBG_2PhutHon",
+      "source_frames": 901,
+      "fps": 30.0,
+      "duration_seconds": 30.0,
+      "bind": "add_pubg-male-bind.json",
+      "note": "Raw 901-frame/30 s male source archived for later. Not exported, not enabled, and not admitted by weakening the existing 30 s runtime limit."
+    },
+    {
+      "file": "animations/Amod_PUBG_2PhutHon_female.smd",
+      "sha256": "90c507a46b4bdd38b26cb9a53194c6b51d6620bd73d1e5dfbbd824c044b04a7a",
+      "runtime_status": "future_only_not_enabled",
+      "source_mdl": "D:\\SteamLibrary\\steamapps\\workshop\\content\\4000\\2538387266\\2538387266_via_crowbar\\models\\player\\ani_am4\\add_pubg\\anim_f_01.mdl",
+      "source_mdl_sha256": "e414db27d2a1b0a40d2f984b65fdd986fac737514c83a2cb8a84a26cdb066bcc",
+      "source_ani_sha256": "658d4da68286821e718cd5a6ba0ceda1615c0f9e70c0c11b39f94869043e25d2",
+      "sequence": "Amod_PUBG_2PhutHon",
+      "source_frames": 901,
+      "fps": 30.0,
+      "duration_seconds": 30.0,
+      "bind": "add_pubg-male-bind.json",
+      "note": "Raw 901-frame/30 s female source archived for later. Not exported, not enabled, and not admitted by weakening the existing 30 s runtime limit."
+    }
+  ]
+}

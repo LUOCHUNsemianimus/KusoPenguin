@@ -64,6 +64,7 @@ public final class PenguinMeshModel {
     private record Loaded(Map<PenguinMeshPreview.Quality,PenguinMeshModel> meshes,
                           Map<PenguinMeshPreview.Quality,PenguinSkinnedMesh> skins,
                           Map<PenguinAction,PenguinAnimationClip> clips,
+                          PenguinAnimationClip dancePole, PenguinAnimationClip danceHip,
                           PenguinSkinnedMesh ignisSkin, PenguinSkinnedMesh guardianSkin) {}
     private static volatile Loaded cache;
 
@@ -115,6 +116,15 @@ public final class PenguinMeshModel {
     public static PenguinAnimationClip animationClip(){return animationClip(PenguinAction.TAUNT);}
     public static PenguinAnimationClip animationClip(PenguinAction action){
         Loaded loaded=cache;return loaded==null?null:loaded.clips().get(action);
+    }
+    /**
+     * Source-backed builtin hip (0) or pole (1). Null before the first complete reload and for
+     * every other style; imported clips are never replaced by the old procedural equations.
+     */
+    public static PenguinAnimationClip sourceDanceClip(int style){
+        Loaded loaded=cache;
+        if(loaded==null)return null;
+        return style==0?loaded.danceHip():style==1?loaded.dancePole():null;
     }
     public static PenguinSkinnedMesh currentSkin(){
         Loaded loaded=cache;
@@ -606,13 +616,16 @@ public final class PenguinMeshModel {
                     if(!parsedClip.sameRigAs(clip))throw new IOException("Animation rig mismatch for "+location);
                     clips.put(action,parsedClip);
                 }
+                PenguinAnimationClip dancePole=loadDanceClip(resourceManager,clip,"dance_pole.json");
+                PenguinAnimationClip danceHip=loadDanceClip(resourceManager,clip,"dance_hip.json");
                 Map<PenguinMeshPreview.Quality,PenguinSkinnedMesh> skins=new EnumMap<>(PenguinMeshPreview.Quality.class);
                 for(var entry:parsed.entrySet())skins.put(entry.getKey(),PenguinSkinnedMesh.bake(entry.getValue(),clip));
                 PenguinSkinnedMesh ignisSkin=loadVariant(resourceManager,
                         meshResource("cataclysm/ignis_legless.json"),clip);
                 PenguinSkinnedMesh guardianSkin=loadVariant(resourceManager,
                         meshResource("cataclysm/ender_guardian.json"),clip);
-                return new Loaded(Map.copyOf(parsed),Map.copyOf(skins),Map.copyOf(clips),ignisSkin,guardianSkin);
+                return new Loaded(Map.copyOf(parsed),Map.copyOf(skins),Map.copyOf(clips),
+                        dancePole,danceHip,ignisSkin,guardianSkin);
             } catch (IOException | RuntimeException exception) {
                 LOGGER.error("Failed to load experimental penguin mesh tiers {}", MODELS.values(),
                         exception);
@@ -625,6 +638,21 @@ public final class PenguinMeshModel {
         protected void apply(Loaded models,
                              ResourceManager resourceManager, ProfilerFiller profiler) {
             cache = models;
+        }
+
+        private static PenguinAnimationClip loadDanceClip(ResourceManager manager,
+                                                          PenguinAnimationClip bind,
+                                                          String name) throws IOException {
+            ResourceLocation location=ResourceLocation.fromNamespaceAndPath(
+                    KusoPenguin.MODID,"animations/"+name);
+            Resource resource=manager.getResource(location)
+                    .orElseThrow(()->new IOException("Missing animation "+location));
+            try(Reader reader=new InputStreamReader(resource.open(),StandardCharsets.UTF_8)){
+                PenguinAnimationClip parsed=PenguinAnimationClip.parse(reader);
+                if(!parsed.sameRigAs(bind))throw new IOException(
+                        "Animation rig mismatch for "+location);
+                return parsed;
+            }
         }
     }
 }

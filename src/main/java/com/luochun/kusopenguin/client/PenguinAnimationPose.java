@@ -12,7 +12,8 @@ public final class PenguinAnimationPose {
     final Matrix4f[] skin=new Matrix4f[PenguinRig.COUNT];
     final Matrix4f headDelta;
     private PenguinAnimationPose(PenguinAction action,PenguinAnimationClip clip,PenguinAnimationClip.Sample sample,
-                                 PenguinBodyModel nativeParts,EntityModel<?> original) {
+                                 PenguinBodyModel nativeParts,EntityModel<?> original,
+                                 PenguinProportions.Profile profile) {
         weight=sample.weight();
         world[0]=local(sample,0);
         Matrix4f nativeBody=part(nativeParts.body());
@@ -23,7 +24,6 @@ public final class PenguinAnimationPose {
         // One anatomical leg rebind for every action pose, before any skin matrix is derived.
         PenguinLegPose.apply(world,clip);
         for(int i=0;i<skin.length;i++)skin[i]=new Matrix4f(world[i]).translate(clip.bind(i).negate());
-        PenguinProportions.Profile profile=PenguinProportions.forModel(original);
         Matrix4f nativeHead=PenguinHeadRenderer.headMatrix(original);
         Quaternionf nativeBodyQ=rotation(nativeBody),nativeHeadQ=rotation(nativeHead),chestQ=rotation(world[2]);
         Quaternionf localNativeHead=new Quaternionf(nativeBodyQ).conjugate().mul(nativeHeadQ);
@@ -120,7 +120,20 @@ public final class PenguinAnimationPose {
     public static PenguinAnimationPose evaluate(PenguinAction action,PenguinAnimationClip clip,
                                                 PenguinAnimationClip.Sample sample,PenguinBodyModel parts,
                                                 EntityModel<?> original) {
-        return new PenguinAnimationPose(action,clip,sample,parts,original);
+        PenguinProportions.Profile profile=PenguinProportions.forModel(original);
+        return profile==null?null:evaluate(action,clip,sample,parts,original,profile);
+    }
+    /**
+     * Explicit-profile overload for callers that already resolved the dancer's profile. Imported
+     * builtin dance clips use this so a formerly prone family (for example COW/SHEEP/PIG) keeps
+     * the profile supplied by {@link PenguinDancePose} instead of recomputing a null forModel.
+     * A null profile is a caller error and fails instead of silently succeeding.
+     */
+    public static PenguinAnimationPose evaluate(PenguinAction action,PenguinAnimationClip clip,
+                                                PenguinAnimationClip.Sample sample,PenguinBodyModel parts,
+                                                EntityModel<?> original,PenguinProportions.Profile profile) {
+        if(profile==null)throw new IllegalArgumentException("explicit animation profile must not be null");
+        return new PenguinAnimationPose(action,clip,sample,parts,original,profile);
     }
     private void child(PenguinAnimationClip clip,PenguinAnimationClip.Sample s,int i){
         int p=PenguinRig.PARENTS[i];Vector3f delta=clip.bind(i).sub(clip.bind(p));

@@ -1,0 +1,136 @@
+[
+  {
+    "file": "Amod_AM4_Spooky_Month_Dance_male.smd",
+    "sha256": "01bc242f9a8ce7452662fa1cbfacdae11d4f4b7fe8565908d10bed0dc03d3216",
+    "source_mdl": "D:\\SteamLibrary\\steamapps\\workshop\\content\\4000\\2538387266\\2538387266_via_crowbar\\models\\player\\ani_am4\\add_taunt\\anim_m_03.mdl",
+    "source_mdl_sha256": "71fda46c231de87b17de4b2451a21c396ac22e1665300fed7c54423bbe4988b0",
+    "source_ani_sha256": "03a46b5bf3418c96dba08bcf2e990f53ed032f962de06334bdb9685e7c7e2f46",
+    "sequence": "Amod_AM4_Spooky_Month_Dance",
+    "local_sequence_index": 1,
+    "bones": 56,
+    "animation": {
+      "name": "@Amod_AM4_Spooky_Month_Dance",
+      "fps": 30.0,
+      "flags": 1,
+      "frames": 10
+    },
+    "duration_seconds": 0.3
+  },
+  {
+    "file": "Amod_AM4_Spooky_Month_Dance_female.smd",
+    "sha256": "ae509198f517ce821b79cb2541cd112bb3d1ce56f71890ab4d1dde8b6730f5e2",
+    "source_mdl": "D:\\SteamLibrary\\steamapps\\workshop\\content\\4000\\2538387266\\2538387266_via_crowbar\\models\\player\\ani_am4\\add_taunt\\anim_f_03.mdl",
+    "source_mdl_sha256": "9f68151da1b7f3ea3709bba1165b667889196015ee110cb58453c0606e44e615",
+    "source_ani_sha256": "d5ac0db420ccb71be7463fe9fcdd693fb04a733645f3e49fbf93b4719f83beb0",
+    "sequence": "Amod_AM4_Spooky_Month_Dance",
+    "local_sequence_index": 1,
+    "bones": 56,
+    "animation": {
+      "name": "@Amod_AM4_Spooky_Month_Dance",
+      "fps": 30.0,
+      "flags": 1,
+      "frames": 10
+    },
+    "duration_seconds": 0.3
+  },
+  {
+    "file": "Amod_MMD_GetDown_male.smd",
+    "sha256": "11478f245a553d334cb1a45bda05652abe327ff9123fc33cf9f00d8105594d9d",
+    "source_mdl": "D:\\SteamLibrary\\steamapps\\workshop\\content\\4000\\2538387266\\2538387266_via_crowbar\\models\\player\\ani_am4\\add_mmd\\anim_m_03.mdl",
+    "source_mdl_sha256": "aa9c104afc6ceab31661de9a88295633d09b247440d9656e35cd794aee987c1d",
+    "source_ani_sha256": "cb030f6002dbc75cbcc5402f9591c3b591c94ad07b6a701e43d1143a752120fd",
+    "sequence": "Amod_MMD_GetDown",
+    "local_sequence_index": 6,
+    "bones": 56,
+    "animation": {
+      "name": "@Amod_MMD_GetDown",
+      "fps": 30.0,
+      "flags": 0,
+      "frames": 1198
+    },
+    "duration_seconds": 39.9,
+    "crop": {
+      "file": "Amod_MMD_GetDown_male_last2s.smd",
+      "sha256": "c42422e7552ddd2739f6587d67f42ba0d370de44f7dd0ed0385a5b890279e446",
+      "first_source_frame": 1137,
+      "last_source_frame": 1197,
+      "frames": 61,
+      "duration_seconds": 2.0
+    },
+    "requested_candidate": {
+      "file": "Amod_MMD_GetDown_male_end_minus1_to_minus0p5.smd",
+      "sha256": "37adc37e8be3852e4506cf753bec77119723c03f9b9df17fe50d72b8754c1378",
+      "first_source_frame": 1167,
+      "last_source_frame": 1182,
+      "duration_seconds": 0.5,
+      "status": "Source pelvis/chest/legs static in this interval; not accepted as hip dance."
+    }
+  },
+  {
+    "file": "Amod_MMD_GetDown_female.smd",
+    "sha256": "703a803b1a1d4b26e4f9deb24ea36b88f02c610c429545897336b8ce47b5dc2f",
+    "source_mdl": "D:\\SteamLibrary\\steamapps\\workshop\\content\\4000\\2538387266\\2538387266_via_crowbar\\models\\player\\ani_am4\\add_mmd\\anim_f_03.mdl",
+    "source_mdl_sha256": "93c69556de7f0a42a2e6748bc106648ba9d980dfbe0a3fa0e62356b0d3f9c85b",
+    "source_ani_sha256": "a0714e71254f3be031248bdf4a15a4f351331b9224856efc739660ea9f1c4e47",
+    "sequence": "Amod_MMD_GetDown",
+    "local_sequence_index": 6,
+    "bones": 56,
+    "animation": {
+      "name": "@Amod_MMD_GetDown",
+      "fps": 30.0,
+      "flags": 0,
+      "frames": 1198
+    },
+    "duration_seconds": 39.9,
+    "crop": {
+      "file": "Amod_MMD_GetDown_female_last2s.smd",
+      "sha256": "6b7d14d3f712cbb8dbaf6b0fd7dc5905b886f469e3164c95c001e9f236df828e",
+      "first_source_frame": 1137,
+      "last_source_frame": 1197,
+      "frames": 61,
+      "duration_seconds": 2.0
+    },
+    "requested_candidate": {
+      "file": "Amod_MMD_GetDown_female_end_minus1_to_minus0p5.smd",
+      "sha256": "d9a5dfdbde479482d32c4507cd9e9919ee13cfd15baaceedc4dc9719e4ad6133",
+      "first_source_frame": 1167,
+      "last_source_frame": 1182,
+      "duration_seconds": 0.5,
+      "status": "Source pelvis/chest/legs static in this interval; not accepted as hip dance."
+    }
+  },
+  {
+    "file": "Amod_PUBG_2PhutHon_male.smd",
+    "sha256": "576bca037609835094716a7791a0f93db0196c54e0c729a9c3088c236f4ce178",
+    "source_mdl": "D:\\SteamLibrary\\steamapps\\workshop\\content\\4000\\2538387266\\2538387266_via_crowbar\\models\\player\\ani_am4\\add_pubg\\anim_m_01.mdl",
+    "source_mdl_sha256": "81ef7389753d9e47e79a4bfafbbd59ad043c17844f2e5ea97ed055edc8df030f",
+    "source_ani_sha256": "15497d3a631e625abd8a6dfb143f58186e8ebdd4d58b46794b74fda0b81234bb",
+    "sequence": "Amod_PUBG_2PhutHon",
+    "local_sequence_index": 6,
+    "bones": 56,
+    "animation": {
+      "name": "@Amod_PUBG_2PhutHon",
+      "fps": 30.0,
+      "flags": 0,
+      "frames": 901
+    },
+    "duration_seconds": 30.0
+  },
+  {
+    "file": "Amod_PUBG_2PhutHon_female.smd",
+    "sha256": "90c507a46b4bdd38b26cb9a53194c6b51d6620bd73d1e5dfbbd824c044b04a7a",
+    "source_mdl": "D:\\SteamLibrary\\steamapps\\workshop\\content\\4000\\2538387266\\2538387266_via_crowbar\\models\\player\\ani_am4\\add_pubg\\anim_f_01.mdl",
+    "source_mdl_sha256": "e414db27d2a1b0a40d2f984b65fdd986fac737514c83a2cb8a84a26cdb066bcc",
+    "source_ani_sha256": "658d4da68286821e718cd5a6ba0ceda1615c0f9e70c0c11b39f94869043e25d2",
+    "sequence": "Amod_PUBG_2PhutHon",
+    "local_sequence_index": 6,
+    "bones": 56,
+    "animation": {
+      "name": "@Amod_PUBG_2PhutHon",
+      "fps": 30.0,
+      "flags": 0,
+      "frames": 901
+    },
+    "duration_seconds": 30.0
+  }
+]

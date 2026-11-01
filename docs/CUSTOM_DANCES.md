@@ -99,7 +99,9 @@ DanceLibrary.isBuiltin(id);
 DanceLibrary.builtins();     // List<Builtin(id, translationKey, durationSeconds)>
 ```
 
-时长沿用现有 5 秒风格节拍：单风格 5 秒，`builtin:cycle` 15 秒。
+时长沿用现有 5 秒风格节拍：单风格 5 秒，`builtin:cycle` 15 秒。`builtin:hip` 与 `builtin:pole` 的源片段/循环长度分别为 0.4666667 s 和 0.3333333 s，不改变该 gameplay 时钟。
+
+这两个内置动作由 `tools/export_gmod_dances.py` 从检入的 GMod Source 归档离线生成 `dance_hip.json` / `dance_pole.json`；运行时在资源重载时缓存并由共享 `PenguinAnimationPose.evaluate` 采样，不读取 SMD、不做逐帧 IO。源坐标已修正为实际前向 −Y，导出基 `C=(-X,-Z,+Y)` 是 det=−1 反射，旋转按 `C R C^-1` 共轭；目标翼段以固定 canonical bind link 映射到修正后的 Source 动画方向，方向残差纳入 `--check`。源文件、哈希、选取区间、56→16 重定向、方向证明与 `--check` 说明见 `docs/GMOD_DANCE_SOURCES.md`。PUBG male/female 仅作为未来素材归档，未启用，也未通过放宽 30 秒限制来接纳。
 
 ### 偏好
 
