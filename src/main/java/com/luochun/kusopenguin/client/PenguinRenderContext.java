@@ -346,7 +346,7 @@ public final class PenguinRenderContext {
         PreviewFrame preview=previewFrame(f.entity);
         if(preview!=null)return previewPose(preview,f,profile);
         if(com.luochun.kusopenguin.client.revival.RevivalClientState.pole(f.entity)){
-            PenguinAnimationPose custom=playbackPose(f,Source.REVIVAL);
+            PenguinAnimationPose custom=playbackPose(f,Source.REVIVAL,profile);
             if(custom!=null)return custom;
             return PenguinDancePose.evaluatePole(
                     com.luochun.kusopenguin.client.revival.RevivalClientState.elapsed(f.entity,f.partial),
@@ -361,7 +361,7 @@ public final class PenguinRenderContext {
                         ?PenguinDancePose.evaluate(elapsed,shared,f.model,profile)
                         :PenguinDancePose.evaluateStyle(style,elapsed,shared,f.model,profile);
             }
-            PenguinAnimationPose custom=playbackClip(f,clipId,elapsed);
+            PenguinAnimationPose custom=playbackClip(f,clipId,elapsed,profile);
             if(custom!=null)return custom;
         }
         // Legacy fallback for a Disc.Dance membership whose new Playback has not arrived yet.
@@ -382,30 +382,23 @@ public final class PenguinRenderContext {
         }
         PenguinAnimationClip clip=preview.clip();
         if(clip==null)return null;
-        float duration=clip.totalDuration();
-        if(!(duration>0.0F)||!Float.isFinite(age))return null;
-        float wrapped=age%duration;
-        if(wrapped<0.0F)wrapped+=duration;
-        PenguinAnimationClip.Sample sample=clip.sample(wrapped);
-        if(sample.weight()<=0.0F)return null;
-        return PenguinAnimationPose.evaluate(PenguinAction.TAUNT,clip,sample,shared,f.model);
+        if(!Float.isFinite(age))return null;
+        PenguinAnimationClip.Sample sample=clip.sampleLoop(age);
+        return PenguinAnimationPose.evaluate(PenguinAction.TAUNT,clip,sample,shared,f.model,profile);
     }
-    private static PenguinAnimationPose playbackPose(Frame f,Source source){
+    private static PenguinAnimationPose playbackPose(Frame f,Source source,PenguinProportions.Profile profile){
         if(!DanceClient.active(f.entity,source))return null;
-        return playbackClip(f,DanceClient.clip(f.entity),DanceClient.elapsed(f.entity,f.partial));
+        return playbackClip(f,DanceClient.clip(f.entity),DanceClient.elapsed(f.entity,f.partial),profile);
     }
-    /** Uploaded clips reuse the fixed 16-joint evaluate path and loop on the total duration. */
-    private static PenguinAnimationPose playbackClip(Frame f,String clipId,float elapsed){
+    /** Uploaded clips reuse the fixed 16-joint path and loop on the authored source period. */
+    private static PenguinAnimationPose playbackClip(Frame f,String clipId,float elapsed,
+                                                      PenguinProportions.Profile profile){
         if(clipId==null||clipId.isEmpty()||DanceLibrary.isBuiltin(clipId))return null;
         PenguinAnimationClip clip=DanceClient.cachedClip(clipId);
         if(clip==null)return null;
-        float duration=clip.totalDuration();
-        if(!(duration>0.0F)||!Float.isFinite(elapsed))return null;
-        float age=elapsed%duration;
-        if(age<0.0F)age+=duration;
-        PenguinAnimationClip.Sample sample=clip.sample(age);
-        if(sample.weight()<=0.0F)return null;
-        return PenguinAnimationPose.evaluate(PenguinAction.TAUNT,clip,sample,shared,f.model);
+        if(!Float.isFinite(elapsed))return null;
+        PenguinAnimationClip.Sample sample=clip.sampleLoop(elapsed);
+        return PenguinAnimationPose.evaluate(PenguinAction.TAUNT,clip,sample,shared,f.model,profile);
     }
     private static int builtinStyle(String clipId){
         if(DanceLibrary.BUILTIN_HIP.equals(clipId))return 0;

@@ -25,7 +25,21 @@ public final class PenguinAnimationClip {
         if(!Float.isFinite(age))throw new IllegalArgumentException("Non-finite animation time");
         float weight=age<0||age>=totalDuration()?0:age<blendIn?smooth(age/blendIn):
                 age>blendIn+duration?smooth((totalDuration()-age)/blendOut):1;
-        float t=Math.max(0,Math.min(duration,age-blendIn));
+        return sampled(weight,Math.max(0,Math.min(duration,age-blendIn)));
+    }
+    /**
+     * Samples the authored source motion as a continuous loop at full weight. The source period is
+     * {@code duration}; blend_in/out remain parser contract only and are never entered by a
+     * looping custom dance. One-shot actions must keep using {@link #sample(float)} and
+     * {@link #sampleTerminal(float)}.
+     */
+    public Sample sampleLoop(float age) {
+        if(!Float.isFinite(age))throw new IllegalArgumentException("Non-finite animation time");
+        float t=age%duration;
+        if(t<0)t+=duration;
+        return sampled(1, t);
+    }
+    private Sample sampled(float weight,float t) {
         int found=Arrays.binarySearch(times,t),lo=found>=0?found:Math.max(0,-found-2);
         int hi=Math.min(times.length-1,lo+1);float f=lo==hi?0:(t-times[lo])/(times[hi]-times[lo]);
         Quaternionf[] q=new Quaternionf[PenguinRig.COUNT];Vector3f[] p=new Vector3f[q.length],s=new Vector3f[q.length];

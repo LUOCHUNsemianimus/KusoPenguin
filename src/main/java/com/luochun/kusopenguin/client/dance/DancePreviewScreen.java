@@ -87,9 +87,6 @@ public final class DancePreviewScreen extends Screen {
             avatar.yHeadRot = 180.0F;
             avatar.yHeadRotO = 180.0F;
             float age = playing ? (Util.getMillis() - started) / 1000.0F : pausedAge;
-            if (clip != null && clip.totalDuration() > 0.0F) {
-                age %= clip.totalDuration();
-            }
             try (PenguinRenderContext.PreviewScope ignored =
                      PenguinRenderContext.pushPreview(avatar, clipId, clip, age)) {
                 InventoryScreen.renderEntityInInventoryFollowsAngle(graphics,

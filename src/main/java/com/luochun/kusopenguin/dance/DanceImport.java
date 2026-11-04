@@ -37,9 +37,12 @@ import org.joml.Vector3f;
  *
  * <p>The DAE path reads the visual-scene node hierarchy and its rest matrices, requires one
  * synchronous LINEAR {@code node/matrix} channel per bone needed by the fixed 16-joint penguin
- * rig, and retargets only directional aim. Root translation is never copied. The finished JSON is
- * passed through {@link DanceLibrary#canonicalize(byte[])} so the server and client share exactly
- * one schema/bind validator.</p>
+ * rig, and transfers source world orientations and limb directions with the existing
+ * {@code C(v)=-v} Mixamo convention. No artistic joint clamps are applied: only finite/unit
+ * validation remains. Root translation is never copied; the source's vertical hips excursion is
+ * scaled anatomically into the pelvis sample inside the 24-pixel translation contract. The
+ * finished JSON is passed through {@link DanceLibrary#canonicalize(byte[])} so the server and
+ * client share exactly one schema/bind validator.</p>
  */
 public final class DanceImport {
     public static final long MAX_SOURCE_BYTES = 8L * 1024L * 1024L;
@@ -186,7 +189,7 @@ public final class DanceImport {
         PenguinAnimationClip reference = taunt();
         Object[] frameData = retarget(bones, localChannels, times, reference);
         byte[] canonicalBytes = buildCanonical(name, source, times, blendIn, blendOut,
-            (Quaternionf[][]) frameData[0], reference);
+            (Quaternionf[][]) frameData[0], (Vector3f[][]) frameData[1], reference);
         DanceLibrary.Canonical canonical = DanceLibrary.canonicalize(canonicalBytes);
         if (Math.abs(canonical.duration() - (duration + blendIn + blendOut)) > 0.001F) {
             throw new IOException("Retargeted duration does not match the source");
@@ -532,68 +535,80 @@ public final class DanceImport {
                                      float[] times, PenguinAnimationClip reference)
         throws IOException {
         Map<Bone, Matrix4f> restWorld = restWorldMatrices(bones);
-        Quaternionf restHips = rotation(restWorld.get(bones.get("Hips")));
-        Quaternionf restSpine2 = rotation(restWorld.get(bones.get("Spine2")));
-        Quaternionf restNeckHead = new Quaternionf(restRotation(bones.get("Neck")))
-            .mul(restRotation(bones.get("Head")));
+        float restHipsY = restWorld.get(bones.get("Hips")).getTranslation(new Vector3f()).y;
+        // Anatomical scale: the 16-pixel canonical pelvis-to-head span over the largest
+        // Hips->Head extension in the clip. This is a body-length ratio, not a pose calibration.
+        float torsoSpan = reference.bind(PenguinRig.HEAD)
+            .sub(reference.bind(PenguinRig.PELVIS)).length();
+        float maxHipsHead = 0.0F;
+        for (int frame = 0; frame < times.length; frame++) {
+            Map<Bone, Matrix4f> world = worldMatrices(bones, locals, frame);
+            Vector3f hipsPos = world.get(bones.get("Hips")).getTranslation(new Vector3f());
+            Vector3f headPos = world.get(bones.get("Head")).getTranslation(new Vector3f());
+            maxHipsHead = Math.max(maxHipsHead, hipsPos.distance(headPos));
+        }
+        if (!(maxHipsHead > 1.0E-4F)) {
+            throw new IOException("DAE Hips->Head span is degenerate");
+        }
+        float pixelsPerUnit = torsoSpan / maxHipsHead;
         Quaternionf[][] result = new Quaternionf[times.length][PenguinRig.COUNT];
+        Vector3f[][] translations = new Vector3f[times.length][PenguinRig.COUNT];
         for (int frame = 0; frame < times.length; frame++) {
             Map<Bone, Matrix4f> world = worldMatrices(bones, locals, frame);
             Quaternionf hips = rotation(world.get(bones.get("Hips")));
             Quaternionf spine2 = rotation(world.get(bones.get("Spine2")));
+            Quaternionf head = rotation(world.get(bones.get("Head")));
             Quaternionf[] q = result[frame];
+            Vector3f[] p = translations[frame];
             for (int i = 0; i < q.length; i++) {
                 q[i] = new Quaternionf();
+                p[i] = new Vector3f();
             }
-            Quaternionf pelvis = limit(new Quaternionf(restSpine2).conjugate()
-                .mul(new Quaternionf(hips).mul(new Quaternionf(restHips).conjugate()))
-                .mul(restSpine2), 55, "pelvis", frame);
-            Quaternionf chest = limit(new Quaternionf(restSpine2).conjugate().mul(spine2),
-                65, "chest", frame);
-            q[1] = pelvis;
-            q[2] = new Quaternionf(pelvis).conjugate().mul(chest);
-            // Neck*Head in local space is the calibrated head offset; the rest product is its
-            // neutral value, so the delta is independent of any guessed animation frame.
-            Quaternionf neckHead = new Quaternionf(rotation(locals.get("Neck")[frame]))
-                .mul(rotation(locals.get("Head")[frame]));
-            Quaternionf head = limit(new Quaternionf(neckHead)
-                .mul(new Quaternionf(restNeckHead).conjugate()), 55, "head", frame);
-            q[3] = head;
-            retargetArm(q, 4, "Right", world, bones, reference, frame);
-            retargetArm(q, 7, "Left", world, bones, reference, frame);
+            // C(v)=-v transfers source world rotations unchanged (C R C^-1 = R). Use the
+            // source world orientations directly; never subtract this clip's first pose as rest.
+            q[1] = unit(new Quaternionf(hips), "pelvis", frame);
+            q[2] = unit(new Quaternionf(hips).conjugate().mul(spine2), "chest", frame);
+            q[3] = unit(new Quaternionf(spine2).conjugate().mul(head), "head", frame);
+            Vector3f hipsPos = world.get(bones.get("Hips")).getTranslation(new Vector3f());
+            p[1] = new Vector3f(0.0F, -(hipsPos.y - restHipsY) * pixelsPerUnit, 0.0F);
+            if (!finite(p[1].y) || p[1].length() > 24.0F) {
+                throw new IOException("Pelvis visual displacement exceeds 24 pixels on frame "
+                    + frame);
+            }
+            retargetArm(q, 4, "Right", world, bones, reference, frame, spine2);
+            retargetArm(q, 7, "Left", world, bones, reference, frame, spine2);
             retargetLeg(q, 10, "Right", world, bones, frame);
             retargetLeg(q, 13, "Left", world, bones, frame);
         }
-        return new Object[]{result};
+        return new Object[]{result, translations};
     }
 
     private static void retargetArm(Quaternionf[] q, int offset, String side,
                                     Map<Bone, Matrix4f> world, Map<String, Bone> bones,
-                                    PenguinAnimationClip reference, int frame) throws IOException {
+                                    PenguinAnimationClip reference, int frame,
+                                    Quaternionf chestWorld) throws IOException {
         String arm = side + "Arm";
         String foreArm = side + "ForeArm";
         String hand = side + "Hand";
         String middle = side + "HandMiddle1";
-        Quaternionf parent = rotation(world.get(bones.get("Spine2")));
-        Vector3f upper = direction(world, bones, arm, foreArm, "Spine2", frame);
-        Vector3f fore = direction(world, bones, foreArm, hand, "Spine2", frame);
-        Vector3f handDir = direction(world, bones, hand, middle, "Spine2", frame);
+        Vector3f upper = direction(world, bones, arm, foreArm, frame);
+        Vector3f fore = direction(world, bones, foreArm, hand, frame);
+        Vector3f handDir = direction(world, bones, hand, middle, frame);
         Vector3f b0 = reference.bind(offset);
         Vector3f b1 = reference.bind(offset + 1);
         Vector3f b2 = reference.bind(offset + 2);
-        Vector3f v01 = new Vector3f(b1).sub(b0);
-        Vector3f v12 = new Vector3f(b2).sub(b1);
-        Vector3f tip = new Vector3f(side.equals("Right") ? 0.4F : -0.4F, 3.5F, 0.3F);
-        q[offset] = limit(aim(v01, upper, arm, frame), 140, arm, frame);
-        q[offset + 1] = limit(aim(v12, rotate(new Quaternionf(q[offset]).conjugate(), fore),
-            foreArm, frame), 110, foreArm, frame);
-        Quaternionf parentQ = new Quaternionf(q[offset]).mul(q[offset + 1]);
-        q[offset + 2] = limit(aim(tip, rotate(parentQ.conjugate(), handDir), hand, frame),
-            65, hand, frame);
-        // parent is intentionally read here to keep the source parent orientation explicit.
-        if (!finite(parent.x)) {
-            throw new IOException("Non-finite source parent rotation on frame " + frame);
-        }
+        Vector3f v01 = new Vector3f(b1).sub(b0).normalize();
+        Vector3f v12 = new Vector3f(b2).sub(b1).normalize();
+        // The reviewed visible wing end, mirrored for the negative-X wing.
+        Vector3f tip = new Vector3f(side.equals("Right") ? 0.78F : -0.78F, 2.0F, 0.17F)
+            .normalize();
+        Quaternionf upperWorld = aim(v01, upper.negate(), arm, frame);
+        q[offset] = unit(new Quaternionf(chestWorld).conjugate().mul(upperWorld), arm, frame);
+        Quaternionf foreWorld = aim(v12, fore.negate(), foreArm, frame);
+        q[offset + 1] = unit(new Quaternionf(upperWorld).conjugate().mul(foreWorld),
+            foreArm, frame);
+        Quaternionf tipWorld = aim(tip, handDir.negate(), hand, frame);
+        q[offset + 2] = unit(new Quaternionf(foreWorld).conjugate().mul(tipWorld), hand, frame);
     }
 
     private static void retargetLeg(Quaternionf[] q, int offset, String side,
@@ -603,25 +618,24 @@ public final class DanceImport {
         String leg = side + "Leg";
         String foot = side + "Foot";
         String toe = side + "ToeBase";
-        Vector3f thigh = direction(world, bones, upLeg, leg, "Hips", frame);
-        Vector3f calf = direction(world, bones, leg, foot, "Hips", frame);
-        Vector3f toes = direction(world, bones, foot, toe, "Hips", frame);
-        Vector3f down = new Vector3f(0, 1, 0);
-        q[offset] = limit(aim(down, thigh, upLeg, frame), 150, upLeg, frame);
-        q[offset + 1] = limit(aim(down, rotate(new Quaternionf(q[offset]).conjugate(), calf),
-            leg, frame), 140, leg, frame);
-        Quaternionf parentQ = new Quaternionf(q[offset]).mul(q[offset + 1]);
-        q[offset + 2] = limit(aim(new Vector3f(0, 0, -1),
-            rotate(parentQ.conjugate(), toes), foot, frame), 80, foot, frame);
+        Vector3f thigh = direction(world, bones, upLeg, leg, frame);
+        Vector3f calf = direction(world, bones, leg, foot, frame);
+        Vector3f toes = direction(world, bones, foot, toe, frame);
+        Vector3f down = new Vector3f(0.0F, 1.0F, 0.0F);
+        // Canonical leg roots are children of root (identity), not the pelvis.
+        Quaternionf thighWorld = aim(down, thigh.negate(), upLeg, frame);
+        q[offset] = unit(new Quaternionf(thighWorld), upLeg, frame);
+        Quaternionf calfWorld = aim(down, calf.negate(), leg, frame);
+        q[offset + 1] = unit(new Quaternionf(thighWorld).conjugate().mul(calfWorld), leg, frame);
+        Quaternionf footWorld = aim(new Vector3f(0.0F, 0.0F, -1.0F), toes.negate(), foot, frame);
+        q[offset + 2] = unit(new Quaternionf(calfWorld).conjugate().mul(footWorld), foot, frame);
     }
 
     private static Vector3f direction(Map<Bone, Matrix4f> world, Map<String, Bone> bones,
-                                      String start, String end, String parent, int frame)
-        throws IOException {
+                                      String start, String end, int frame) throws IOException {
         Bone startBone = bones.get(start);
         Bone endBone = bones.get(end);
-        Bone parentBone = bones.get(parent);
-        if (startBone == null || endBone == null || parentBone == null) {
+        if (startBone == null || endBone == null) {
             throw new IOException("Missing required retarget bone on frame " + frame);
         }
         Vector3f from = world.get(startBone).getTranslation(new Vector3f());
@@ -631,9 +645,15 @@ public final class DanceImport {
             throw new IOException("Degenerate bone direction " + start + " -> " + end
                 + " on frame " + frame);
         }
-        delta.normalize();
-        new Quaternionf(rotation(world.get(parentBone))).conjugate().transform(delta);
-        return delta.negate();
+        return delta.normalize();
+    }
+
+    private static Quaternionf unit(Quaternionf q, String bone, int frame) throws IOException {
+        if (!finite(q.x) || !finite(q.y) || !finite(q.z) || !finite(q.w)
+            || q.lengthSquared() < 1.0E-12F) {
+            throw new IOException("Non-finite or zero rotation for " + bone + " on frame " + frame);
+        }
+        return q.normalize();
     }
 
     private static Map<Bone, Matrix4f> worldMatrices(Map<String, Bone> bones,
@@ -679,36 +699,11 @@ public final class DanceImport {
         return result;
     }
 
-    private static Quaternionf restRotation(Bone bone) {
-        return rotation(bone.restLocal);
-    }
-
     private static Quaternionf rotation(Matrix4f matrix) {
         Quaternionf q = matrix.getUnnormalizedRotation(new Quaternionf());
         if (!finite(q.x) || !finite(q.y) || !finite(q.z) || !finite(q.w)
             || q.lengthSquared() < 1.0E-12F) {
             throw new IllegalArgumentException("Non-finite or zero matrix rotation");
-        }
-        return q.normalize();
-    }
-
-    private static Quaternionf limit(Quaternionf q, float degrees, String bone, int frame)
-        throws IOException {
-        if (!finite(q.x) || !finite(q.y) || !finite(q.z) || !finite(q.w)) {
-            throw new IOException("Non-finite rotation for " + bone + " on frame " + frame);
-        }
-        q.normalize();
-        if (q.w < 0) {
-            q.set(-q.x, -q.y, -q.z, -q.w);
-        }
-        float angle = 2.0F * (float) Math.acos(Math.max(-1.0F, Math.min(1.0F, q.w)));
-        float maximum = (float) Math.toRadians(degrees);
-        if (angle > maximum) {
-            Vector3f axis = new Vector3f(q.x, q.y, q.z).normalize();
-            q.set(axis.x * (float) Math.sin(maximum / 2.0F),
-                axis.y * (float) Math.sin(maximum / 2.0F),
-                axis.z * (float) Math.sin(maximum / 2.0F),
-                (float) Math.cos(maximum / 2.0F));
         }
         return q.normalize();
     }
@@ -729,13 +724,10 @@ public final class DanceImport {
         return new Quaternionf(cross.x, cross.y, cross.z, 1.0F + dot).normalize();
     }
 
-    private static Vector3f rotate(Quaternionf q, Vector3f value) {
-        return q.transform(new Vector3f(value));
-    }
-
     private static byte[] buildCanonical(String name, byte[] source, float[] times,
                                          float blendIn, float blendOut, Quaternionf[][] rotations,
-                                         PenguinAnimationClip reference) throws IOException {
+                                         Vector3f[][] translations, PenguinAnimationClip reference)
+        throws IOException {
         JsonObject asset = new JsonObject();
         asset.addProperty("schema", 1);
         asset.addProperty("name", name);
@@ -774,11 +766,12 @@ public final class DanceImport {
                 values.add(rotation.z);
                 values.add(rotation.w);
                 q.add(values);
-                JsonArray zero = new JsonArray();
-                zero.add(0);
-                zero.add(0);
-                zero.add(0);
-                p.add(zero.deepCopy());
+                Vector3f translation = translations[frame][i];
+                JsonArray offset = new JsonArray();
+                offset.add(translation.x);
+                offset.add(translation.y);
+                offset.add(translation.z);
+                p.add(offset);
                 JsonArray one = new JsonArray();
                 one.add(1);
                 one.add(1);
