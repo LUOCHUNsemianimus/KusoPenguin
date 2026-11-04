@@ -181,6 +181,8 @@
   "gui.kuso_penguin.dance.trigger.music": "音乐",
   "gui.kuso_penguin.dance.trigger.revival": "复活",
   "gui.kuso_penguin.dance.trigger.maid_music": "女仆音乐",
+  "gui.kuso_penguin.dance.trigger.animal_music": "动物唱片机",
+  "gui.kuso_penguin.dance.trigger.animal_music.tooltip": "动物使用上传这张唱片者设置的动物舞蹈，而不是最近玩家的设置。",
   "gui.kuso_penguin.dance.manage": "管理",
   "gui.kuso_penguin.dance.empty_slot": "未分配",
   "gui.kuso_penguin.dance.missing_clip": "不可用",

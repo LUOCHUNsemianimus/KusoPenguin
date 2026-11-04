@@ -583,6 +583,7 @@ public final class DanceServer {
             case MUSIC -> prefs.music();
             case REVIVAL -> prefs.revival();
             case MAID_MUSIC -> prefs.maidMusic();
+            case ANIMAL_MUSIC -> prefs.animalMusic();
         };
     }
 

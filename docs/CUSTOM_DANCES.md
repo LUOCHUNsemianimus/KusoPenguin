@@ -1,16 +1,16 @@
 # 玩家自定义舞蹈库与传输 / Custom Dance Library & Transport
 
-**状态：动作导入、独立动作库、三类触发设置、K 轮盘、8 个默认未绑定快捷键与真实企鹅模型预览已实现。** 开发验收证据位于工作区 `.workflow/projects/kuso-penguin/runtime/dance-20261031/`；最终观感以用户验收为准。
+**状态：动作导入、独立动作库、四类触发设置、K 轮盘、8 个槽位/独立快捷键与真实企鹅模型预览已实现。** 开发验收证据位于工作区 `.workflow/projects/kuso-penguin/runtime/dance-20261031/`；最终观感以用户验收为准。
 
 ## 使用 / Usage
 
 - 输入 `/kusopenguin dances` 打开管理页，将规范企鹅动画 JSON 或受支持的 Mixamo DAE 拖入窗口，也可填写本地路径后点“导入”。先预览，再点“上传”，等待服务器保存回执。
-- 选择动作后，可分别绑定“唱片机音乐”“复活”“女仆音乐”，也可指定轮盘槽位。K 优先处理原有尸体／胶片复活；其他情况打开自己或所指女仆的轮盘。只有主人能控制女仆，服务端核对 4 格范围和视线。
-- Minecraft 键位设置内有 8 个舞蹈槽位快捷键，默认均未绑定。重复选择当前手动动作可停止；轮盘中间也可停止主动舞蹈。音乐自动触发仍由音乐是否播放决定。
+- 选择动作后，可分别绑定“唱片机音乐”“复活”“女仆音乐”“动物唱片机”，也可指定轮盘槽位。K 优先处理原有尸体／胶片复活；其他情况打开自己或所指女仆的轮盘。只有主人能控制女仆，服务端核对 4 格范围和视线。
+- 八个轮盘槽默认前四槽为 `builtin:hip`/`builtin:pole`/`builtin:wave`/`builtin:cycle`，后四槽为空；Minecraft 键位设置内的 8 个舞蹈槽位快捷键默认未绑定。重复选择当前手动动作可停止；轮盘中间也可停止主动舞蹈。音乐自动触发仍由音乐是否播放决定。
 - 有企鹅效果且未演奏的女仆，在另一女仆 12 格范围内听到上传的 MIDI 时按主人所选动作跳舞；演奏者不被打断，音乐停止／离开范围／效果结束后释放舞蹈 AI 暂停。
 - DAE 首版仅支持 **30 FPS、Y_UP、明确静止骨架、同步 LINEAR matrix 通道的 Mixamo 子集**；不支持任意 DAE、FBX、非矩阵 TRS 通道或未知骨骼。源文件不超过 8 MiB；规范动作不超过 2 MiB、901 帧、30 秒（含淡入淡出）。动作只改变视觉，不授予位移、伤害或复活权限；原有 5 秒／8 秒复活计时不变。
 
-Use `/kusopenguin dances` to import supported Mixamo DAE or canonical penguin JSON, preview the actual penguin, then explicitly upload. Assign independent jukebox, revival and maid-music triggers or one of eight wheel slots. K retains film/corpse revival precedence; otherwise it opens the self/target-maid wheel. Eight vanilla key bindings start unassigned. Only the owner can command a maid, with server-side range and sight checks. Idle penguin maids dance within 12 blocks of another maid playing uploaded MIDI; performers keep playing and AI resumes when the source ends. The DAE subset requires 30 FPS, Y_UP, known rest bones and synchronous LINEAR matrix tracks. FBX and arbitrary skeletons are unsupported. Clips are visual only; gameplay and revival timing remain authoritative.
+Use `/kusopenguin dances` to import supported Mixamo DAE or canonical penguin JSON, preview the actual penguin, then explicitly upload. Assign independent jukebox, revival, maid-music and animal-jukebox triggers or one of eight wheel slots. K retains film/corpse revival precedence; otherwise it opens the self/target-maid wheel. Eight vanilla key bindings start unassigned. Only the owner can command a maid, with server-side range and sight checks. Idle penguin maids dance within 12 blocks of another maid playing uploaded MIDI; performers keep playing and AI resumes when the source ends. The DAE subset requires 30 FPS, Y_UP, known rest bones and synchronous LINEAR matrix tracks. FBX and arbitrary skeletons are unsupported. Clips are visual only; gameplay and revival timing remain authoritative.
 
 ## 1. 范围与复用
 
@@ -106,8 +106,9 @@ DanceLibrary.builtins();     // List<Builtin(id, translationKey, durationSeconds
 ### 偏好
 
 ```java
-public enum Trigger { MUSIC, REVIVAL, MAID_MUSIC }  // 默认 cycle / pole / cycle
-public record Prefs(String music, String revival, String maidMusic, List<String> slots)
+public enum Trigger { MUSIC, REVIVAL, MAID_MUSIC, ANIMAL_MUSIC }  // 默认 cycle / pole / cycle / cycle
+public record Prefs(String music, String revival, String maidMusic, String animalMusic,
+                    List<String> slots)
 Prefs.defaults();                    // 前 4 槽 hip/pole/wave/cycle，后 4 槽为空
 library.preferences(uuid);           // 自动把失效/非本人选择安全重置
 library.setPreference(uuid, trigger, clipId);  // 空白 = 重置该通道默认
@@ -116,9 +117,15 @@ library.selectable(uuid, clipId);              // builtin 或本人已有上传
 DanceServer.preferences(ServerPlayer);
 ```
 
-偏好持久化在 world-root `kusopenguin/dances/preferences.json`。选择只接受 builtin 或该玩家本人 registration 的 hash；删除该玩家 registration 后仅该玩家的引用自动恢复默认/空槽并写回，其他 owner 的同 hash registration 不受影响。设置类操作（SET_PREF/SET_SLOT）要求玩家拥有企鹅效果；成功的 SET_PREF/SET_SLOT 在回复后立即发送 `Catalog(open=false)`。
+偏好持久化在 world-root `kusopenguin/dances/preferences.json`。偏好 schema 仍为 1；旧文件**缺少** `animal_music` 时，加载把原 `music` 迁移为 `animalMusic`（只补缺失字段），保留旧存档中动物实际使用的动作；字段存在但格式非法仍按严格校验拒绝，不会静默修复。新保存总是写入 `animal_music`。
 
-## 5. 网络协议（`DanceNetwork`，registrar `"1"`）
+唱片机参与者的频道归属：玩家使用 `MUSIC`，精确类型 `touhou_little_maid:maid` 使用 `MUSIC`/`MAID_MUSIC`；其他动物参与者使用**上传该唱片者**的 `ANIMAL_MUSIC`，不再取最近玩家的设置。
+
+选择只接受 builtin 或该玩家本人 registration 的 hash；删除该玩家 registration 后仅该玩家的引用自动恢复默认/空槽并写回，其他 owner 的同 hash registration 不受影响。设置类操作（SET_PREF/SET_SLOT）要求玩家拥有企鹅效果；成功的 SET_PREF/SET_SLOT 在回复后立即发送 `Catalog(open=false)`。
+
+## 5. 网络协议（`DanceNetwork`，registrar `"2"`）
+
+网络注册版本为 **2**：客户端与服务端必须使用同一版本，旧客户端会被明确拒绝，避免偏好/播放数据错位。
 
 独立包 ID：`kuso_penguin:dance_request`、`dance_chunk`、`dance_reply`、`dance_catalog`、`dance_playback`、`dance_control`。
 
@@ -127,7 +134,7 @@ DanceServer.preferences(ServerPlayer);
 - `Chunk(ticket, offset, byte[])`：单块 ≤16 KiB，offset 非负。
 - `Reply(action, ticket, success, message, clipId, totalBytes)`。
 - 导入失败仍回复通用的 `message.kuso_penguin.dance.import_failed`，并额外向该客户端发送一条带界错误的系统消息：`Component.translatableWithFallback("message.kuso_penguin.dance.import_failed.detail", ..., detail)`，`detail` 截断到 256 字符且替换控制字符；完整异常仍写入服务端日志。**包结构未改变**，不需要新版协议字段。
-- `Catalog(open, prefs, builtins, clips)`：**只含本人最多 5 个 clip**、4 个 builtin 元数据和 8 槽偏好，不返回全服目录。
+- `Catalog(open, prefs, builtins, clips)`：**只含本人最多 5 个 clip**、4 个 builtin 元数据和 8 槽偏好（含 `animalMusic`），不返回全服目录。
 - `Playback(dimension, entity, session, clipId, startTick, source, playing)`。单一优先级来源是 `Source.priority()`：`REVIVAL(-1) > MANUAL(0) > MAID_MUSIC(1) > MUSIC(2)`；枚举声明顺序（wire order）保持 `MANUAL, MAID_MUSIC, MUSIC, REVIVAL` 不变。`DancePlaybackManager.DISPLAY_ORDER` 直接按该 priority 排序，不再另写复活特例。`session` 唯一，旧 STOP 不能停止新会话。
 - `Control(action, ticket, target, clipId, trigger, slot)`：`slot ∈ [-1,7]`；`SET_PREF` 必须带 trigger；`PLAY` 必须带 clipId。
 
@@ -148,7 +155,7 @@ DanceServer.preferences(ServerPlayer);
 - catalog/reply/chunk/playback 全部在主线程分发；下载在 2 个 IO worker 中做 SHA-256 与 `DanceLibrary.canonicalize` 复核，渲染帧只读取已解析的不可变 `PenguinAnimationClip`。
 - 内存缓存 LRU 上限 8 条/32 MiB；下载按 hash 去重，最多 4 条 pending，严格校验 ticket/offset/总长度，断线 generation 使旧回调失效并清理缓冲。
 - 上传只在 UI 明确选择后开始：worker 先 `DanceImport.convert`，再按服务器 credit 发 BEGIN/chunks/END，上传的正是 `Canonical.bytes()`，使用 `Canonical.hash()` 作为 `expectedHash`。
-- `DanceScreen` 由 `Catalog(open=true)` 或轮盘 Manage 打开；支持路径输入/拖放、异步导入状态、导入格式/时长/帧数/root-motion 报告、标题、上传、重命名/删除本人片段、3 个 trigger 与 8 个 wheel slot 分配、恢复默认。trigger 按钮显示当前分配的动作名和槽位名（过长截断并带完整 tooltip）；选择列表用标题而不是 hash 作为主标签；服务器 catalog 是成功/所有权/偏好的唯一来源。
+- `DanceScreen` 由 `Catalog(open=true)` 或轮盘 Manage 打开；支持路径输入/拖放、异步导入状态、导入格式/时长/帧数/root-motion 报告、标题、上传、重命名/删除本人片段、4 个 trigger（音乐/复活/女仆音乐/动物唱片机）与 8 个 wheel slot 分配、恢复默认。trigger 按钮显示当前分配的动作名和槽位名（过长截断并带完整 tooltip）；选择列表用标题而不是 hash 作为主标签；服务器 catalog 是成功/所有权/偏好的唯一来源。
 - `DanceScreen.rebuildWidgets()` 在任何重建（catalog、分页、导入、预览返回、窗口缩放）前保存当前路径和标题框内容，因此已输入路径和标题不会丢失。`Reset defaults` 发送 `Prefs.defaults()` 的真实值，而不是把新默认槽重新清空。
 - `Preview` 打开 `DancePreviewScreen`：用一个不在世界中注册的 client-only `RemotePlayer`＋企鹅效果渲染原生企鹅；`PenguinRenderContext.pushPreview(entity, clipId, clip, age)` 建立 ThreadLocal 覆盖，并在 `finally` 关闭。覆盖只影响当前预览绘制，且复用与权威播放相同的 `PenguinAnimationPose.evaluate`/内置程序姿态；不修改真实玩家/女仆、不发送网络播放。返回时恢复同一个 `DanceScreen` 实例，预览打开期间不会误取消上传。
 - `DanceWheelScreen` 是 8 扇形径向轮盘：显示自己/女仆目标和每个槽位动作名，点击扇区发送 `PLAY`，中心 Stop 发送 `STOP`，Esc/Stop 关闭；Manage 打开管理界面。打开轮盘只请求 `LIST`（`open=false`），catalog 到达时原地刷新标签，不会强制打开管理页。

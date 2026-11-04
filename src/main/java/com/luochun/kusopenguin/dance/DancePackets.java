@@ -306,6 +306,7 @@ public final class DancePackets {
         writeString(buf, prefs.music(), MAX_CLIP_ID_CHARS);
         writeString(buf, prefs.revival(), MAX_CLIP_ID_CHARS);
         writeString(buf, prefs.maidMusic(), MAX_CLIP_ID_CHARS);
+        writeString(buf, prefs.animalMusic(), MAX_CLIP_ID_CHARS);
         buf.writeVarInt(prefs.slots().size());
         for (String slot : prefs.slots()) {
             writeString(buf, slot, MAX_CLIP_ID_CHARS);
@@ -316,6 +317,7 @@ public final class DancePackets {
         String music = readString(buf, MAX_CLIP_ID_CHARS);
         String revival = readString(buf, MAX_CLIP_ID_CHARS);
         String maidMusic = readString(buf, MAX_CLIP_ID_CHARS);
+        String animalMusic = readString(buf, MAX_CLIP_ID_CHARS);
         int count = buf.readVarInt();
         if (count != Prefs.SLOT_COUNT) {
             throw new DecoderException("Dance preference slot count out of bounds: " + count);
@@ -324,7 +326,7 @@ public final class DancePackets {
         for (int i = 0; i < count; i++) {
             slots.add(readString(buf, MAX_CLIP_ID_CHARS));
         }
-        return new Prefs(music, revival, maidMusic, slots);
+        return new Prefs(music, revival, maidMusic, animalMusic, slots);
     }
 
     private static void writeBuiltin(RegistryFriendlyByteBuf buf, DanceLibrary.Builtin builtin) {

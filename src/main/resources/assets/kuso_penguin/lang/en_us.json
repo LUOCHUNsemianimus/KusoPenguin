@@ -181,6 +181,8 @@
   "gui.kuso_penguin.dance.trigger.music": "Music",
   "gui.kuso_penguin.dance.trigger.revival": "Revival",
   "gui.kuso_penguin.dance.trigger.maid_music": "Maid music",
+  "gui.kuso_penguin.dance.trigger.animal_music": "Animal jukebox",
+  "gui.kuso_penguin.dance.trigger.animal_music.tooltip": "Jukebox animals use the uploaded track owner's animal-dance setting, not the nearest player's.",
   "gui.kuso_penguin.dance.manage": "Manage",
   "gui.kuso_penguin.dance.empty_slot": "Unassigned",
   "gui.kuso_penguin.dance.missing_clip": "Unavailable",

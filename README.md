@@ -1,55 +1,91 @@
-# Kuso Penguin
+# 凑企鹅 / Kuso Penguin
 
-Minecraft 1.21.1 / NeoForge 21.1.243 / Java 21.
+适用于 **Minecraft 1.21.1 / NeoForge 21.1.243 / Java 21** 的企鹅化模组：把玩家和多种原版生物替换成保留原头部的企鹅，并支持导入、预览和绑定自定义企鹅舞蹈。
 
-Experimental potion-driven, head-preserving penguin body replacement.
+当前版本：**1.0.0_beta**。
 
-## Implemented prototype
+## 这是什么
 
-- Effect: `kuso_penguin:penguin`.
-- Vanilla potion items with the registered `kuso_penguin:penguin` potion: normal, splash and lingering forms.
-- Supported adult entities: player, skeleton, zombie, villager, piglin, zombified piglin, creeper, enderman, wither skeleton, zombie villager, iron golem and warden. See [mob adapters](docs/MOB_ADAPTERS.md) for per-family proportions and layer behavior.
-- Penguin geometry: rounded multi-cube body generated from the Blockbench native export (`226` cubes, `512x512` atlas) with `body`, `right_wing`, `left_wing`, `right_foot` and `left_foot` as the five animation roots; feet pivot at the exported Blockbench Y9 position and their leg columns extend into the torso. The original model supplies the head. See [docs/ROUNDED_MODEL.md](docs/ROUNDED_MODEL.md). This cube body is now the retained legacy comparison/fallback path and is not iterated further; the current modeling direction is the polyhedral mesh, one solid colour per face, with colour boundaries authored as real mesh edges (see the mesh preview below and `AGENTS.md`).
-- Vanilla animation poses are read after the original `prepareMobModel`/`setupAnim`; the adapter copies rotations plus translation deltas. The villager's combined crossed `arms` part is mapped explicitly onto both wings.
-- Non-head body layers are filtered for supported entities; head gear and head decorations remain.
-- Chibi proportion preview shared through `PenguinProportions`: ordinary humanoid/creeper/enderman bodies scale to 12/24 (0.5), and villager/zombie-villager bodies to 15/24 (0.625), giving a 2.5-head visible total while the original head keeps its size. Iron golem and Warden retain a large native neck-to-ground span (33/24 and 34/24 body scale); the original wither-skeleton renderer scale is preserved. Scaling is visual-only and pivots on the foot plane. See [docs/CHIBI_PROPORTIONS.md](docs/CHIBI_PROPORTIONS.md).
-- Observer sync bridge for the custom effect only: add/update/remove are broadcast with vanilla effect packets, and a player who starts tracking an already-affected entity receives its current remaining duration. The effect bridge itself uses vanilla packets without periodic resend; animation timing uses separate custom payloads.
-- Experimental low-poly mesh body preview with three mesh tiers: the High mesh is now the default; the block model remains a legacy comparison. Press `F8` in-game to cycle Block -> High (492 triangles) -> Medium (308) -> Low (216) -> Block for players and the supported mob types while the effect is active; the key is rebindable in Controls and the action-bar message names the current and next tier. The initial state can be forced to High for testing with the system property `kuso_penguin.meshPreview=true`. All tiers share the same parser, renderer, texture, five animation roots, shared family proportion profiles and potion rules; the three JSONs are parsed together only during client resource load/reload and swapped as one immutable cache, with no IO on `F8`. Each triangle has three identical UVs and samples one solid swatch from the shared atlas, so every face is one colour and no face spans black and white; the black/white torso boundary is a real mesh edge with shared boundary vertices, the white faces are narrow at the chest and widen over the belly, and the front shoulder is wider and flatter. The Low tier gained a shoulder ring, so it is now 216 triangles rather than the earlier 200. Wings, feet and the ribbon also use one solid colour per face; the old curved mask and speckles are removed. The pre-revision curved-UV sources, runtime JSONs and atlas are kept unchanged in `models/archive/curved-uv-20261020/` for comparison or a whole-set restore; the active sources are the three `models/prototypes/penguin_lowpoly*.bbmodel` files. The previous X/Y coordinate correction, head size, 2.5-head proportions, animation roots and shader render path are unchanged. Mesh export and parsing follow Blockbench Modded Entity's native coordinates: absolute `(-BBx, 24-BBy, BBz)`, root pivot converted the same way, and local `(px-vx, py-vy, vz-pz)`; reflecting both X and Y keeps the saved Blockbench winding, so normals are recomputed from the converted vertices. The action path uses cached two-influence skinning without an external animation dependency; ordinary poses retain the shared native adapters. See [docs/POLYGON_PROTOTYPE.md](docs/POLYGON_PROTOTYPE.md).
+使用本模组的企鹅药水或 `/effect give <目标> kuso_penguin:penguin` 后，目标会以企鹅身体、原版头部和装备的外观行动。变形是视觉替换，不改变实体类型、碰撞箱、AI 目标、伤害或死亡规则；头部、头盔和头部装饰仍由原版渲染。
 
-## Limitations
+支持的成年目标（不含幼年体）：
 
-Baby, invisible, glowing, crouching, riding, swimming, elytra-flying, spectator and unsupported entity types intentionally keep the complete vanilla renderer. First-person arms remain vanilla. No brewing recipe is included in this prototype. Effect sync covers only players currently tracking the affected entity; it relies on the server-side effect lifecycle and does not resend periodically or cover client-side-only fake effects. The experimental mesh preview's earlier live checks predate both the three-tier selector and the per-face solid-colour geometry revision; they remain historical evidence for the shared pipeline and the 492-triangle high mesh only. The preceding 492/308/216 per-face geometry round passed live acceptance for the player and the original five supported mobs: submitted vertices were 1,968/1,232/864, and head size, the 2.5-head proportion, foot anchor and five-root pose mapping all passed. The zombie wing bind still matches the native model, and the `F8` cycle, resource reload, effect-removal restore and Low-tier walking all passed. Geometry audit confirmed identical per-face UVs sampling one solid colour, a closed manifold torso with the black/white boundary on shared edges, shoulder/leg joints inside the torso and overlapping leg columns at +/-1.2 rad; the archive matches the previous delivery hash. See [docs/POLYGON_PROTOTYPE.md](docs/POLYGON_PROTOTYPE.md). The current X/Y correction, head size, 2.5-head proportions, animation roots and shader render path are unchanged by this round. Shader compatibility is user-reported only; Iris and other shaders were not re-tested in this geometry revision, and no FPS benchmark was run.
+- 玩家
+- 骷髅、僵尸、村民、僵尸村民、猪灵、僵尸猪灵、苦力怕、末影人、凋灵骷髅
+- 铁傀儡、监守者
+- 俯卧家族：牛、羊、猪、猫、狼、蜘蛛、洞穴蜘蛛
 
-See [docs/TESTING.md](docs/TESTING.md) for command-line and visual test steps. Representative live-client checks from earlier rounds passed; see [docs/VALIDATION.md](docs/VALIDATION.md) for the tested scope and remaining checks.
+成年玩家在蹲下、骑乘、游泳和鞘翅飞行时仍显示企鹅外观；幼年、隐身、发光、旁观模式和其他未列出的实体保留完整原版外观。其他生物的原版坐下、乘客和游泳回退保持不变。
 
-## Development
+## 主要功能
 
-Windows CMD, Java 21:
+### 企鹅药水与变形
 
-```bat
-set JAVA_HOME=C:\Users\10217\.jdks\ms-21.0.12
-gradlew.bat build --offline
-gradlew.bat runClient --offline
+- 普通、喷溅、滞留三种企鹅药水，以及对应的 tipped arrow。
+- 已实现酿造链：水瓶 + 下界疣 → 粗制的药水；粗制的药水 + 发酵蛛眼 → 臭味基底；臭味基底 + 羽毛 → 企鹅药水；再加红石得到长效企鹅药水。
+- 首次获得效果会播放一次 taunt；效果刷新不会重播，移除效果即恢复原版外观。
+- 三档企鹅网格外形（高/中/低）共用同一套解析、比例、姿势和药水规则；默认高档，`F8` 仅在开发对照中循环旧 Block 与三档网格。
+
+### 自定义舞蹈
+
+- `/kusopenguin dances` 打开自己的舞蹈库：导入规范企鹅动画 JSON，或受支持的 Mixamo DAE 子集；先预览，再明确上传。服务器保存并校验后才会对外生效。
+- 每个玩家最多 5 个动作、10 MiB；全库 128 MiB。服务端只接受规范 JSON，所有选择、所有权和配额均由服务端复核；动作只改变视觉，不授予位移、伤害或复活权限。
+- 可独立绑定四个触发频道：
+  - **音乐**：唱片机参与者中的玩家自己。
+  - **复活**：玩家复活动作。
+  - **女仆音乐**：附近女仆演奏上传 MIDI 时的女仆动作。
+  - **动物唱片机**：唱片机中既不是玩家、也不是精确类型女仆的动物和其他生物，使用**上传该唱片者**设置的动物舞蹈，而不是最近玩家的设置。
+- 八个轮盘槽默认前四槽为 `builtin:hip`/`builtin:pole`/`builtin:wave`/`builtin:cycle`，后四槽为空；八个独立快捷键默认未绑定。K 键在无胶片/尸体复活优先级时打开自己或准星女仆的舞蹈轮盘。
+- 动物唱片机与普通音乐、复活、女仆音乐彼此独立；修改设置后从**下一次舞蹈会话**开始生效，不会中断正在播放的动作。
+- 旧版偏好文件没有独立动物频道时，动物频道自动沿用原“音乐”频道，避免旧存档里动物突然换舞；新保存会写入独立字段。
+
+### 动作、音乐与可选兼容
+
+- 地面疾跑攻击可发动企鹅飞踢；死亡后继续播放前段死亡动作，不延长原版死亡/掉落/复活。
+- 自定义唱片支持 WAV、OGG/Vorbis、MP3，单曲最多 5 分钟；放入原版唱片机后，附近带企鹅效果的兼容生物会排圈跳舞。
+- **沉浸式奏乐（Immersive Melodies）为可选兼容**：安装后可获得持琴姿态、乐器弹唱和人声绑定；未安装时模组仍可正常启动。
+- **东方小女仆（Touhou Little Maid）为可选兼容**：仅对精确类型 `touhou_little_maid:maid` 提供主人控制、女仆音乐和持琴/人声适配；未安装时相关路径惰性跳过。
+
+## 安装
+
+1. 安装 Minecraft 1.21.1、NeoForge 21.1.243（或同 21.1.x 兼容版本）和 Java 21。
+2. 将 `kuso_penguin-1.0.0_beta.jar` 放入 `mods/`。
+3. 客户端与服务端必须使用**同一版本**的模组。舞蹈网络协议已升级到 2；旧客户端会被拒绝连接，避免偏好/播放数据错位。
+4. 本模组不强制安装女仆或沉浸式奏乐；需要对应玩法时再单独安装。
+
+## 基本使用
+
+```text
+/effect give @s kuso_penguin:penguin 3600 0 true
+/kusopenguin dances
 ```
 
-The matching main-mod toolchain is Gradle 9.2.1, ModDevGradle 2.0.142 and Parchment 2024.11.17. Kuso Penguin does not depend on Huhutalk, Touhou Little Maid or JourneyMap. Model source: `models/penguin_body.bbmodel`; compile-time geometry is generated from `models/penguin_body_export.java` by `tools/generate_penguin_geometry.py` (use `--check` to detect drift). That generator belongs to the retained legacy/fallback cube body and is not developed further; the current mesh sources are the three `models/prototypes/penguin_lowpoly*.bbmodel` files exported by `tools/export_penguin_mesh.py`.
+- 在舞蹈库中导入动作、预览并上传；选中动作后点击“动物唱片机”等触发按钮即可绑定。
+- 将自定义唱片放入原版唱片机，附近动物会按上传者的动物设置跳舞；玩家仍按自己的“音乐”设置。
+- 使用 K 键打开轮盘，或到“控制”中给八个舞蹈槽位绑定快捷键。
 
-The chibi preview is a visual ratio only: it does not change the hitbox, attributes, entity type, AI or first-person viewpoint. Small-mob head/body ratios follow the shared `PenguinProportions` formula; the two large families keep explicit native-height profiles. New upright-mob adapter validation and layer behavior are documented in [docs/MOB_ADAPTERS.md](docs/MOB_ADAPTERS.md). `docs/VALIDATION.md` and the earlier acceptance notes in `docs/CHIBI_PROPORTIONS.md` remain historical records of prior rounds, not proof of the rounded-model round.
+## 已知边界
 
-## Taunt animation preview
+- 不是“所有生物”都支持；只保证上面列出的成年目标，其余实体保持原版。幼年、隐身、发光和旁观模式回退原版外观；成年玩家的蹲下、骑乘、游泳和鞘翅飞行仍保留企鹅外观，其他生物的原版坐下、乘客和游泳回退继续使用。
+- 自定义 DAE 只支持 30 FPS、Y_UP、固定已知骨架、同步 LINEAR matrix 通道的 Mixamo 子集；不支持任意 DAE、FBX、非矩阵 TRS 或未知骨骼。
+- 舞蹈动作和变形的最终视觉效果可能因模型、光影和客户端设置不同；Iris 等光影未做完整兼容性保证。
+- 服务器音乐/舞蹈文件的配额、权限和所有权校验以服务端为准；客户端界面显示的所有权状态不是授权依据。
 
-A newly acquired penguin effect plays the Mixamo-referenced taunt once on the three mesh tiers, then returns to native poses. Refreshing its duration does not replay it; removal cancels it. The default tier is High. F8 still offers legacy Block, where the whole taunt is disabled. The original static meshes and repaired tail sources are unchanged.
+## 开发与来源说明
 
-首次获得企鹅效果会播放一次taunt，刷新不重播，移除即取消；三档网格均支持，默认高档。F8仍保留旧Block对照，该档完整停用taunt。躯干连续蒙皮、双翼各三段、原头挂点与髋—膝—脚三段腿控制已接入；本动作腿部保持原版动作。后续飞踢是否需要改短腿外形或并入躯干，保留实机判断。详见 [TAUNT_ANIMATION](docs/TAUNT_ANIMATION.md)。
+- 构建：Windows CMD + Java 21，`gradlew.bat build --offline`；客户端 `gradlew.bat runClient --offline`。
+- 第三方组件与许可：见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+- 自定义舞蹈完整规则、网络协议和边界：[docs/CUSTOM_DANCES.md](docs/CUSTOM_DANCES.md)。
+- 音乐、动作、渲染和兼容性细节见 `docs/` 下对应文档；这些文档记录开发验收范围，不等同于对所有环境的保证。
+- 内置 `builtin:hip` / `builtin:pole` 由检入仓库的 GMod Source 归档离线生成，来源、哈希、选取区间与 56→16 重定向说明见 [docs/GMOD_DANCE_SOURCES.md](docs/GMOD_DANCE_SOURCES.md)；用户自行上传的音频、模型或动画，其所有权与许可由上传者负责。
 
+## 文档入口
 
-## Combat and death preview
-
-企鹅效果期间，在地面疾跑并按攻击键可主动飞踢，无需先命中目标：约前移 4 格、跃起 1 格，
-冷却 3 秒，沿途前方目标各受一次正常武器伤害和击退 II，遵守队伍与 PVP。
-支持的小型近战怪物可自主选择单目标跃进，允许落空，冷却 4 秒，不伤害旁观生物。
-详见 [FLYING_KICK](docs/FLYING_KICK.md)。
-
-正常死亡后，未加入世界的客户端副本继续播放前 60 源帧的死亡动作；保留原头与装备，
-不延长原版死亡、掉落或复活。详见 [DEATH_ANIMATION](docs/DEATH_ANIMATION.md)。
-客户端和服务端须使用同一测试构建（动画网络协议版本 3）。本轮没有新增前置模组。
+- [自定义舞蹈](docs/CUSTOM_DANCES.md)
+- [自定义唱片](docs/DANCE_DISC.md)
+- [飞行踢](docs/FLYING_KICK.md)
+- [死亡动作](docs/DEATH_ANIMATION.md)
+- [人声与麦克风](docs/VOCALS.md)
+- [沉浸式奏乐兼容](docs/IMMERSIVE_MELODIES_COMPAT.md)
+- [女仆兼容](docs/MAID_KICK_COMPAT.md)
+- [测试说明](docs/TESTING.md)

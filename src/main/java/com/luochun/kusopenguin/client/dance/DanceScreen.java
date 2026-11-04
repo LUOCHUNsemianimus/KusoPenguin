@@ -116,20 +116,25 @@ public final class DanceScreen extends Screen {
                 .bounds(left, listTop + row * 14, listWidth, 14).build());
         }
 
+        // Four trigger rows plus four quick-slot rows must stay above the reset button even at
+        // 1280x720 GUI 3 (240 scaled pixels). Keep the normal 12 px rows on taller screens.
+        boolean compactRows = height < 260;
+        int triggerStep = compactRows ? 11 : 12;
         int triggerY = listTop;
         for (Trigger trigger : Trigger.values()) {
-            addRenderableWidget(triggerButton(trigger, rightX, triggerY, rightWidth));
-            triggerY += 12;
+            addRenderableWidget(triggerButton(trigger, rightX, triggerY, rightWidth, triggerStep));
+            triggerY += triggerStep;
         }
-        int slotY = triggerY + 4;
+        int slotStep = compactRows ? 11 : 12;
+        int slotY = triggerY + (compactRows ? 2 : 4);
         int slotWidth = (rightWidth - 2) / 2;
         for (int slot = 0; slot < Prefs.SLOT_COUNT; slot++) {
             int column = slot % 2;
             int row = slot / 2;
             int slotIndex = slot;
             Button button = Button.builder(slotLabel(slot), b -> assignSlot(slotIndex))
-                .bounds(rightX + column * (slotWidth + 2), slotY + row * 12,
-                    slotWidth, 12).build();
+                .bounds(rightX + column * (slotWidth + 2), slotY + row * slotStep,
+                    slotWidth, slotStep).build();
             button.setTooltip(Tooltip.create(fullSlotLabel(slot)));
             button.active = DanceClient.selectable(selectedId);
             addRenderableWidget(button);
@@ -198,16 +203,21 @@ public final class DanceScreen extends Screen {
             case MUSIC -> prefs.music();
             case REVIVAL -> prefs.revival();
             case MAID_MUSIC -> prefs.maidMusic();
+            case ANIMAL_MUSIC -> prefs.animalMusic();
         };
     }
 
-    private Button triggerButton(Trigger trigger, int x, int y, int width) {
+    private Button triggerButton(Trigger trigger, int x, int y, int width, int rowHeight) {
         Component full = Component.literal(triggerLabel(trigger).getString() + ": "
             + DanceClient.clipLabel(currentSelection(trigger)).getString());
         String fitted = font.plainSubstrByWidth(full.getString(), width - 6);
         Button button = Button.builder(Component.literal(fitted), b -> assign(trigger))
-            .bounds(x, y, width, 12).build();
-        button.setTooltip(Tooltip.create(full));
+            .bounds(x, y, width, rowHeight).build();
+        Component tooltip = trigger == Trigger.ANIMAL_MUSIC
+            ? full.copy().append("\n").append(Component.translatable(
+                "gui.kuso_penguin.dance.trigger.animal_music.tooltip"))
+            : full;
+        button.setTooltip(Tooltip.create(tooltip));
         button.active = DanceClient.selectable(selectedId);
         return button;
     }

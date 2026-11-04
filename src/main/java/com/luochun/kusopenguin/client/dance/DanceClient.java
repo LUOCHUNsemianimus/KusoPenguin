@@ -107,6 +107,7 @@ public final class DanceClient implements DanceClientHooks.Listener {
                 case MUSIC -> defaults.music();
                 case REVIVAL -> defaults.revival();
                 case MAID_MUSIC -> defaults.maidMusic();
+                case ANIMAL_MUSIC -> defaults.animalMusic();
             });
         }
         for (int slot = 0; slot < Prefs.SLOT_COUNT; slot++) {

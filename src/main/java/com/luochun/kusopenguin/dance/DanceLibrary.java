@@ -623,6 +623,7 @@ public final class DanceLibrary {
             safeSelection(player, dirty.music(), Trigger.MUSIC.defaultClip()),
             safeSelection(player, dirty.revival(), Trigger.REVIVAL.defaultClip()),
             safeSelection(player, dirty.maidMusic(), Trigger.MAID_MUSIC.defaultClip()),
+            safeSelection(player, dirty.animalMusic(), Trigger.ANIMAL_MUSIC.defaultClip()),
             slots);
     }
 
@@ -649,6 +650,8 @@ public final class DanceLibrary {
                 hash.equals(before.music()) ? Trigger.MUSIC.defaultClip() : before.music(),
                 hash.equals(before.revival()) ? Trigger.REVIVAL.defaultClip() : before.revival(),
                 hash.equals(before.maidMusic()) ? Trigger.MAID_MUSIC.defaultClip() : before.maidMusic(),
+                hash.equals(before.animalMusic()) ? Trigger.ANIMAL_MUSIC.defaultClip()
+                    : before.animalMusic(),
                 before.slots().stream().map(slot -> hash.equals(slot) ? Prefs.EMPTY : slot).toList());
             if (!before.equals(after)) {
                 entry.setValue(after);
@@ -966,6 +969,9 @@ public final class DanceLibrary {
         String music = requireString(json, "music");
         String revival = requireString(json, "revival");
         String maidMusic = requireString(json, "maid_music");
+        // Schema 1 predates the independent animal channel: old animals used the stored music
+        // choice, so migrate from that field. A present but malformed field is never repaired.
+        String animalMusic = json.has("animal_music") ? requireString(json, "animal_music") : music;
         JsonElement slotsElement = json.get("slots");
         if (slotsElement == null || !slotsElement.isJsonArray()) {
             throw new IllegalArgumentException("slots is not an array");
@@ -981,7 +987,7 @@ public final class DanceLibrary {
             }
             slots.add(slot.getAsString());
         }
-        return new Prefs(music, revival, maidMusic, slots);
+        return new Prefs(music, revival, maidMusic, animalMusic, slots);
     }
 
     private void savePreferences() throws IOException {
@@ -994,6 +1000,7 @@ public final class DanceLibrary {
             item.addProperty("music", prefs.music());
             item.addProperty("revival", prefs.revival());
             item.addProperty("maid_music", prefs.maidMusic());
+            item.addProperty("animal_music", prefs.animalMusic());
             JsonArray slots = new JsonArray();
             for (String slot : prefs.slots()) {
                 slots.add(slot);

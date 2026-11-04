@@ -368,8 +368,23 @@ public final class DancePlaybackManager {
         if (server == null) {
             return;
         }
-        UUID owner = prefsOwner != null ? prefsOwner : session.track.owner();
-        String clip = selection(server, owner, Trigger.MUSIC);
+        // Players and exact TLM maids keep the MUSIC channel. Other jukebox participants (wild
+        // animals and other supported creatures) use the independent animal channel owned by the
+        // uploaded track's owner. The selection is captured once per dance session, matching the
+        // existing trigger semantics; later preference edits apply from the next session.
+        UUID owner;
+        Trigger trigger;
+        if (entity instanceof Player) {
+            owner = prefsOwner != null ? prefsOwner : entity.getUUID();
+            trigger = Trigger.MUSIC;
+        } else if (MelodiesDanceCompat.isMaid(entity)) {
+            owner = prefsOwner != null ? prefsOwner : session.track.owner();
+            trigger = Trigger.MUSIC;
+        } else {
+            owner = session.track.owner();
+            trigger = Trigger.ANIMAL_MUSIC;
+        }
+        String clip = selection(server, owner, trigger);
         addLayer(server, entity, Source.MUSIC, clip, owner, session.started, session.id, null, 0);
     }
 
@@ -556,6 +571,7 @@ public final class DancePlaybackManager {
             case MUSIC -> prefs.music();
             case REVIVAL -> prefs.revival();
             case MAID_MUSIC -> prefs.maidMusic();
+            case ANIMAL_MUSIC -> prefs.animalMusic();
         };
         if (clip == null || clip.isEmpty()) {
             return trigger.defaultClip();
