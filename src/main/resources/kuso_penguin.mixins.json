@@ -30,6 +30,7 @@
     "MaidHeldItemLayerMixin",
     "MaidGeoRendererMixin",
     "MaidGeoHeldLayerMixin",
+    "MaidCarryRendererMixin",
     "MaidYsmEntryMixin",
     "MaidYsmNativeMeshMixin",
     "MaidYsmLayerMixin",

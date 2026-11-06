@@ -54,6 +54,11 @@ public final class PenguinRenderSupport {
     }
 
     public static boolean shouldReplace(LivingEntity entity) {
+        // No complete mesh means no visible replacement: keep the entire native body and head,
+        // including detached death copies, optional maid layers and other render bridges.
+        if (!PenguinMeshModel.ready()) {
+            return false;
+        }
         if(PenguinDeathClient.rendering(entity))return true;
         if (!isSupportedType(entity.getType()) && !isIronHumanoidType(entity.getType())) {
             return false;
@@ -64,12 +69,20 @@ public final class PenguinRenderSupport {
             return false;
         }
         boolean prone = isProneType(entity.getType());
+        // The exact TLM maid is the only non-player family allowed to keep the penguin body while
+        // its native seat/carry state is active. Sleeping is rejected before that relaxation and
+        // every unrelated vehicle still keeps the complete native renderer.
+        boolean maid = PenguinEntitySupport.isMaid(entity.getType());
+        if (maid && (entity.isSleeping() || entity.hasPose(Pose.SLEEPING))) {
+            return false;
+        }
+        boolean supportedMaidPosture = maid && PenguinMaidPosture.isSupported(entity);
         // Native fall-flying is fitted for adult players only. Other mobs keep the previous
         // complete-vanilla fall-flying renderer/exclusion.
         if (entity.isFallFlying() && !(entity instanceof Player)) {
             return false;
         }
-        if (!(entity instanceof Player)) {
+        if (!(entity instanceof Player) && !supportedMaidPosture) {
             if (entity.isPassenger() || entity.isSwimming() || entity.hasPose(Pose.SITTING)) {
                 return false;
             }

@@ -3,7 +3,6 @@ package com.luochun.kusopenguin.client.compat;
 import com.luochun.kusopenguin.animation.PenguinEntitySupport;
 import com.luochun.kusopenguin.client.PenguinAnimationClip;
 import com.luochun.kusopenguin.client.PenguinMeshModel;
-import com.luochun.kusopenguin.client.PenguinMeshPreview;
 import com.luochun.kusopenguin.client.PenguinRenderContext;
 import com.luochun.kusopenguin.client.PenguinRig;
 import com.luochun.kusopenguin.client.PenguinSkinnedMesh;
@@ -75,7 +74,7 @@ public final class IgnisCompatClient {
                 || !PenguinEntitySupport.isIgnis(entity.getType())
                 || !entity.hasEffect(ModEffects.PENGUIN) || entity.isBaby()
                 || entity.isInvisible() || entity.isCurrentlyGlowing() || entity.isSpectator()
-                || !PenguinMeshPreview.isEnabled() || PenguinMeshModel.ignisSkin()==null
+                || !PenguinMeshModel.ready() || PenguinMeshModel.ignisSkin()==null
                 || PenguinMeshModel.animationClip()==null) return null;
         return resolve(model);
     }

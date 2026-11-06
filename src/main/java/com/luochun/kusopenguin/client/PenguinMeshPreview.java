@@ -12,19 +12,16 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 import org.lwjgl.glfw.GLFW;
 
 /**
- * Client-only experimental switch between the accepted block body and the upstream low-poly mesh.
- * F8 cycles block -> high -> medium -> low -> block. It changes only the visual body path while the
- * penguin effect is active; vanilla entities, the original head, proportions, animation, hitbox and
- * first-person view are untouched.
+ * Client-only detail switch between the three low-poly mesh tiers. F8 cycles
+ * high -> medium -> low -> high. It changes only the visual body path while the penguin effect is
+ * active; vanilla entities, the original head, proportions, animation, hitbox and first-person view
+ * are untouched.
  */
 @EventBusSubscriber(modid = KusoPenguin.MODID, bus = EventBusSubscriber.Bus.GAME,
         value = Dist.CLIENT)
 public final class PenguinMeshPreview {
-    public static final String ENABLE_PROPERTY = "kuso_penguin.meshPreview";
-
     /** Rendering quality selected by F8; the wire format and animation roots are shared. */
     public enum Quality {
-        BLOCK("block"),
         HIGH("high"),
         MEDIUM("medium"),
         LOW("low");
@@ -50,7 +47,7 @@ public final class PenguinMeshPreview {
             InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_F8,
             "key.categories.kuso_penguin");
-    private static Quality quality = "false".equalsIgnoreCase(System.getProperty(ENABLE_PROPERTY)) ? Quality.BLOCK : Quality.HIGH;
+    private static Quality quality = Quality.HIGH;
 
     private PenguinMeshPreview() {
     }
@@ -61,10 +58,6 @@ public final class PenguinMeshPreview {
 
     public static Quality quality() {
         return quality;
-    }
-
-    public static boolean isEnabled() {
-        return quality != Quality.BLOCK;
     }
 
     public static void toggle() {

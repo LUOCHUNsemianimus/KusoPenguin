@@ -4,7 +4,6 @@ import com.luochun.kusopenguin.client.PenguinAnimationPose;
 import com.luochun.kusopenguin.client.PenguinBodyLayer;
 import com.luochun.kusopenguin.client.PenguinBodyModel;
 import com.luochun.kusopenguin.client.PenguinHeldItemRenderer;
-import com.luochun.kusopenguin.client.PenguinMeshPreview;
 import com.luochun.kusopenguin.client.PenguinRenderContext;
 import com.luochun.kusopenguin.client.PenguinRenderSupport;
 import com.luochun.kusopenguin.client.PenguinRig;
@@ -113,7 +112,7 @@ public final class IronHumanoidCompatClient {
         if (!AVAILABLE || !(entity instanceof LivingEntity living)
                 || !ACTIVE.get().isEmpty()
                 || !isWhitelisted(entity.getType())
-                || !PenguinMeshPreview.isEnabled()
+                || !PenguinMeshModel.ready()
                 || !PenguinRenderSupport.shouldReplace(living)) {
             return false;
         }

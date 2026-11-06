@@ -3,7 +3,6 @@ package com.luochun.kusopenguin.client.compat;
 import com.luochun.kusopenguin.animation.PenguinEntitySupport;
 import com.luochun.kusopenguin.client.PenguinAnimationClip;
 import com.luochun.kusopenguin.client.PenguinMeshModel;
-import com.luochun.kusopenguin.client.PenguinMeshPreview;
 import com.luochun.kusopenguin.client.PenguinRenderContext;
 import com.luochun.kusopenguin.client.PenguinRig;
 import com.luochun.kusopenguin.client.PenguinSkinnedMesh;
@@ -118,7 +117,7 @@ public final class EnderGuardianCompatClient {
                 || entity.isInvisible()
                 || entity.isCurrentlyGlowing()
                 || entity.isSpectator()
-                || !PenguinMeshPreview.isEnabled()
+                || !PenguinMeshModel.ready()
                 || PenguinMeshModel.guardianSkin() == null
                 || PenguinMeshModel.animationClip() == null) {
             return null;

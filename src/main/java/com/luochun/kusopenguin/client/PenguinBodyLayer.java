@@ -54,10 +54,12 @@ public final class PenguinBodyLayer<T extends LivingEntity, M extends EntityMode
         }
 
         PenguinRenderContext.prepareBody(this.penguin);
-        PenguinMeshModel mesh = PenguinMeshPreview.isEnabled()
-                ? PenguinMeshModel.current()
-                : null;
-        VertexConsumer vertexConsumer = bodyBuffer(buffer, mesh);
+        PenguinMeshModel mesh = PenguinMeshModel.current();
+        if (mesh == null) {
+            // No complete mesh yet: leave the native body/head pass untouched instead of masking it.
+            return;
+        }
+        VertexConsumer vertexConsumer = bodyBuffer(buffer);
         int packedOverlay = LivingEntityRenderer.getOverlayCoords(livingEntity, 0.0F);
         poseStack.pushPose();
         try {
@@ -82,14 +84,13 @@ public final class PenguinBodyLayer<T extends LivingEntity, M extends EntityMode
                                            EntityModel<?> originalModel) {
         PenguinBodyModel penguin = PenguinRenderContext.sharedModel();
         PenguinProportions.Profile profile = PenguinRenderContext.profile(originalModel);
-        if (penguin == null || profile == null) {
+        PenguinMeshModel mesh = PenguinMeshModel.current();
+        if (penguin == null || profile == null || mesh == null) {
+            // A missing mesh must not suppress or replace the native body draw.
             return;
         }
         PenguinRenderContext.prepareBody(penguin);
-        PenguinMeshModel mesh = PenguinMeshPreview.isEnabled()
-                ? PenguinMeshModel.current()
-                : null;
-        VertexConsumer vertexConsumer = bodyBuffer(buffer, mesh);
+        VertexConsumer vertexConsumer = bodyBuffer(buffer);
         int packedOverlay = LivingEntityRenderer.getOverlayCoords(entity, 0.0F);
         poseStack.pushPose();
         try {
@@ -103,22 +104,21 @@ public final class PenguinBodyLayer<T extends LivingEntity, M extends EntityMode
         }
     }
 
-    private static VertexConsumer bodyBuffer(MultiBufferSource buffer, PenguinMeshModel mesh) {
-        return buffer.getBuffer(RenderType.entityCutoutNoCull(
-                mesh != null ? PenguinMeshModel.TEXTURE : PenguinBodyModel.TEXTURE));
+    private static VertexConsumer bodyBuffer(MultiBufferSource buffer) {
+        return buffer.getBuffer(RenderType.entityCutoutNoCull(PenguinMeshModel.TEXTURE));
     }
 
     private static void drawBody(PoseStack poseStack, VertexConsumer vertexConsumer,
                                  int packedLight, int packedOverlay, PenguinBodyModel penguin,
                                  PenguinMeshModel mesh) {
         PenguinAnimationPose animated = PenguinRenderContext.pose();
-        if (mesh != null && animated != null) {
+        if (animated != null) {
             PenguinSkinnedMesh skin = PenguinMeshModel.skinFor(mesh);
             if (skin == null) {
                 throw new IllegalStateException("Animated penguin mesh is missing its baked skin");
             }
             skin.render(poseStack, vertexConsumer, packedLight, packedOverlay, -1, animated);
-        } else if (mesh != null && mesh.hasExplicitBindings()) {
+        } else if (mesh.hasExplicitBindings()) {
             // Schema 2 outside action clips: keep the prepared five native roots and render the
             // weighted skin with pelvis-pinned seam vertices, so ordinary walking/crouch/casting
             // fade/prone cannot separate the authored leg seam from the torso.
@@ -129,10 +129,8 @@ public final class PenguinBodyLayer<T extends LivingEntity, M extends EntityMode
             }
             skin.render(poseStack, vertexConsumer, packedLight, packedOverlay, -1,
                     PenguinAnimationPose.nativeBodyOnly(penguin, bind));
-        } else if (mesh != null) {
-            mesh.render(poseStack, vertexConsumer, packedLight, packedOverlay, -1, penguin);
         } else {
-            penguin.renderToBuffer(poseStack, vertexConsumer, packedLight, packedOverlay, -1);
+            mesh.render(poseStack, vertexConsumer, packedLight, packedOverlay, -1, penguin);
         }
     }
 }

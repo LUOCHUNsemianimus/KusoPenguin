@@ -95,20 +95,18 @@ public final class PenguinMeshModel {
     }
 
     /**
-     * The selected tier from the most recent complete resource load, or {@code null} before it.
-     * While the preview is off the high tier is still returned so the already-loaded cache remains
-     * observable; the body layer decides whether to draw it.
+     * True only after the most recent complete reload installed all three tiers, their baked skins
+     * and every animation clip. A failed reload never reaches {@link Loaded} and leaves the previous
+     * complete cache in place. Render paths use this readiness instead of a separate preview switch.
      */
+    public static boolean ready() {
+        return cache != null;
+    }
+
+    /** The selected tier from the most recent complete resource load, or {@code null} before it. */
     public static PenguinMeshModel current() {
         Loaded loaded = cache;
-        if (loaded == null) {
-            return null;
-        }
-        PenguinMeshPreview.Quality quality = PenguinMeshPreview.quality();
-        if (quality == PenguinMeshPreview.Quality.BLOCK) {
-            quality = PenguinMeshPreview.Quality.HIGH;
-        }
-        return loaded.meshes().get(quality);
+        return loaded == null ? null : loaded.meshes().get(PenguinMeshPreview.quality());
     }
 
     List<Part> animationParts(){return List.of(body,rightWing,leftWing,rightFoot,leftFoot);}
@@ -128,19 +126,19 @@ public final class PenguinMeshModel {
     }
     public static PenguinSkinnedMesh currentSkin(){
         Loaded loaded=cache;
-        return loaded==null||!PenguinMeshPreview.isEnabled()?null:loaded.skins().get(PenguinMeshPreview.quality());
+        return loaded==null?null:loaded.skins().get(PenguinMeshPreview.quality());
     }
 
     /** Single pilot tier: original fat body/connected feet with custom cuffs, baked on reload. */
     public static PenguinSkinnedMesh ignisSkin(){
         Loaded loaded=cache;
-        return loaded==null||!PenguinMeshPreview.isEnabled()?null:loaded.ignisSkin();
+        return loaded==null?null:loaded.ignisSkin();
     }
 
     /** Independently baked upper-chest opening for the optional Ender Guardian. */
     public static PenguinSkinnedMesh guardianSkin(){
         Loaded loaded=cache;
-        return loaded==null||!PenguinMeshPreview.isEnabled()?null:loaded.guardianSkin();
+        return loaded==null?null:loaded.guardianSkin();
     }
 
     /**
@@ -627,16 +625,17 @@ public final class PenguinMeshModel {
                 return new Loaded(Map.copyOf(parsed),Map.copyOf(skins),Map.copyOf(clips),
                         dancePole,danceHip,ignisSkin,guardianSkin);
             } catch (IOException | RuntimeException exception) {
-                LOGGER.error("Failed to load experimental penguin mesh tiers {}", MODELS.values(),
-                        exception);
+                LOGGER.error("Failed to load penguin mesh tiers {}", MODELS.values(), exception);
+                // No partial map is installed; the previous complete cache remains the render source.
                 throw new IllegalStateException(
-                        "Invalid experimental penguin mesh resources " + MODELS.values(), exception);
+                        "Invalid penguin mesh resources " + MODELS.values(), exception);
             }
         }
 
         @Override
         protected void apply(Loaded models,
                              ResourceManager resourceManager, ProfilerFiller profiler) {
+            // Reached only for a fully prepared Loaded; a failed prepare leaves the old cache intact.
             cache = models;
         }
 

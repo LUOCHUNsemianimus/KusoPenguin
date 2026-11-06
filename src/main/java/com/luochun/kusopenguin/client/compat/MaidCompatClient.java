@@ -43,6 +43,27 @@ public final class MaidCompatClient {
         return AVAILABLE && Impl.isReady(model);
     }
 
+    /** Exact TLM maid class, not another entity that happens to share the registry namespace. */
+    public static boolean isExactMaid(Object entity) {
+        return AVAILABLE && Impl.isExactMaid(entity);
+    }
+
+    /**
+     * Native support classification for the exact maid:
+     * {@code 0} no vehicle, {@code 1} TLM ground {@code EntitySit} with the measured
+     * {@code -0.125} attachment, {@code 2} TLM {@code EntityChair} with the measured
+     * {@code getMountedHeight()+0.125} attachment, {@code 3} player first-passenger carry,
+     * {@code -1} any unrelated vehicle. The attachment is compared with the actual native value,
+     * not with a general {@code isPassenger()} check.
+     */
+    public static int maidVehicleKind(Object entity) {
+        return AVAILABLE ? Impl.maidVehicleKind(entity) : -1;
+    }
+
+    public static float chairContactOffset(net.minecraft.world.entity.Entity entity) {
+        return AVAILABLE ? Impl.chairContactOffset(entity) : 0.0F;
+    }
+
     public static PenguinProportions.Profile maidProfile(Object model) {
         return AVAILABLE ? Impl.profile(model) : null;
     }
@@ -108,6 +129,47 @@ public final class MaidCompatClient {
                 return false;
             }
             return isReady(bedrock);
+        }
+
+        static boolean isExactMaid(Object entity) {
+            return entity instanceof com.github.tartaricacid.touhoulittlemaid.entity.passive.EntityMaid;
+        }
+
+        static int maidVehicleKind(Object entity) {
+            if (!(entity instanceof com.github.tartaricacid.touhoulittlemaid.entity.passive.EntityMaid maid)) {
+                return -1;
+            }
+            net.minecraft.world.entity.Entity vehicle = maid.getVehicle();
+            if (vehicle == null) {
+                return 0;
+            }
+            net.minecraft.world.phys.Vec3 offset = vehicle.getPassengerRidingPosition(maid)
+                    .subtract(vehicle.position());
+            if (vehicle instanceof com.github.tartaricacid.touhoulittlemaid.entity.item.EntitySit) {
+                // EntitySit.getPassengerAttachmentPoint -> (0, -0.125, 0).
+                return Math.abs(offset.y + 0.125) <= 1.0E-4 ? 1 : -1;
+            }
+            if (vehicle instanceof com.github.tartaricacid.touhoulittlemaid.entity.item.EntityChair chair) {
+                // EntityChair.getPassengerAttachmentPoint -> (0, getMountedHeight()+0.125, 0).
+                return Math.abs(offset.y - (chair.getMountedHeight() + 0.125)) <= 1.0E-4 ? 2 : -1;
+            }
+            if (vehicle instanceof net.minecraft.world.entity.player.Player player
+                    && player.getFirstPassenger() == maid) {
+                return 3;
+            }
+            return -1;
+        }
+
+        static float chairContactOffset(net.minecraft.world.entity.Entity entity) {
+            if (!(entity.getVehicle() instanceof com.github.tartaricacid.touhoulittlemaid.entity.item.EntityChair chair)) {
+                return 0.0F;
+            }
+            // TLM attaches the rider at mounted height + 2 px. Its built-in cushion is 3 px tall
+            // even with the default mounted height of zero. Other chairs declare their seat height.
+            if ("touhou_little_maid:cushion".equals(chair.getModelId())) {
+                return chair.getMountedHeight() - 1.0F / 16.0F;
+            }
+            return 2.0F / 16.0F;
         }
 
         private static boolean isReady(

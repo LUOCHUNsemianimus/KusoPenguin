@@ -6,19 +6,22 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.geom.ModelLayerLocation;
 import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.model.geom.PartPose;
+import net.minecraft.client.model.geom.builders.CubeListBuilder;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
+import net.minecraft.client.model.geom.builders.MeshDefinition;
+import net.minecraft.client.model.geom.builders.PartDefinition;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.LivingEntity;
 
 /**
- * The complete penguin body: torso, two wings and two feet. The head is intentionally absent and
- * is drawn from the original renderer model.
+ * The five penguin animation roots: torso, two wings and two feet. The visible body is the loaded
+ * low-poly mesh; these parts are empty controls that keep the existing bind pivots and animation
+ * API. The head is intentionally absent and is drawn from the original renderer model.
  */
 public final class PenguinBodyModel extends EntityModel<LivingEntity> {
     public static final ModelLayerLocation LAYER = new ModelLayerLocation(
             ResourceLocation.fromNamespaceAndPath(KusoPenguin.MODID, "penguin_body"), "main");
-    public static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(
-            KusoPenguin.MODID, "textures/entity/penguin_body.png");
 
     private final ModelPart root;
     private final ModelPart body;
@@ -37,7 +40,21 @@ public final class PenguinBodyModel extends EntityModel<LivingEntity> {
     }
 
     public static LayerDefinition createBodyLayer() {
-        return PenguinGeometry.createBodyLayer();
+        // Empty controls only: the retired cube geometry and its generator are intentionally gone.
+        // Pivots and part names must match PenguinMeshModel.EXPECTED_PIVOTS exactly.
+        MeshDefinition mesh = new MeshDefinition();
+        PartDefinition root = mesh.getRoot();
+        root.addOrReplaceChild("body", CubeListBuilder.create(),
+                PartPose.offset(0.0F, 0.0F, 0.0F));
+        root.addOrReplaceChild("right_wing", CubeListBuilder.create(),
+                PartPose.offset(5.45F, 2.6F, 0.2F));
+        root.addOrReplaceChild("left_wing", CubeListBuilder.create(),
+                PartPose.offset(-5.45F, 2.6F, 0.2F));
+        root.addOrReplaceChild("right_foot", CubeListBuilder.create(),
+                PartPose.offset(3.3F, 15.0F, 0.0F));
+        root.addOrReplaceChild("left_foot", CubeListBuilder.create(),
+                PartPose.offset(-3.3F, 15.0F, 0.0F));
+        return LayerDefinition.create(mesh, 64, 64);
     }
 
     public void resetPose() {

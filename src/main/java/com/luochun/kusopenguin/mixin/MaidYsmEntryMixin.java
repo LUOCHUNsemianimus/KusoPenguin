@@ -1,6 +1,7 @@
 package com.luochun.kusopenguin.mixin;
 
 import com.github.tartaricacid.touhoulittlemaid.geckolib3.geo.IGeoEntityRenderer;
+import com.luochun.kusopenguin.client.PenguinMaidPosture;
 import com.luochun.kusopenguin.client.compat.YsmCompatClient;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -45,14 +46,20 @@ public abstract class MaidYsmEntryMixin {
                                           Entity entity, float entityYaw, float partialTick,
                                           PoseStack poseStack, MultiBufferSource bufferSource,
                                           int packedLight) {
-        YsmCompatClient.enter(this, entity, poseStack, bufferSource, packedLight, partialTick);
-        boolean normal = false;
+        poseStack.pushPose();
         try {
-            nativeRenderer.geoRender(entity, entityYaw, partialTick, poseStack, bufferSource,
-                    packedLight);
-            normal = true;
+            PenguinMaidPosture.applyDelegatedCarry(poseStack, entity, partialTick);
+            YsmCompatClient.enter(this, entity, poseStack, bufferSource, packedLight, partialTick);
+            boolean normal = false;
+            try {
+                nativeRenderer.geoRender(entity, entityYaw, partialTick, poseStack, bufferSource,
+                        packedLight);
+                normal = true;
+            } finally {
+                YsmCompatClient.exit(normal);
+            }
         } finally {
-            YsmCompatClient.exit(normal);
+            poseStack.popPose();
         }
     }
 }

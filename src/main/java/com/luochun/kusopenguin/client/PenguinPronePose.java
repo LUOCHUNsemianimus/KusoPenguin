@@ -13,7 +13,6 @@ import net.minecraft.client.model.SheepModel;
 import net.minecraft.client.model.SpiderModel;
 import net.minecraft.client.model.WolfModel;
 import net.minecraft.client.model.geom.ModelPart;
-import org.joml.Vector3f;
 
 /**
  * One static, frame-independent prone pose for the seven native animals.
@@ -59,8 +58,6 @@ final class PenguinPronePose {
     private static final FamilyProfile WOLF = new FamilyProfile(0.68F, -7.0F);
     private static final FamilyProfile SPIDER = new FamilyProfile(0.70F, -3.0F);
 
-    /** Cube-geometry floor bound of the static pose; immutable, so compute it only once. */
-    private static volatile Float cubeFloorNegZ;
     /**
      * Floor bounds of the immutable mesh tiers. Weak keys let a resource reload drop unloaded
      * tiers instead of retaining every old mesh through this cache.
@@ -118,13 +115,13 @@ final class PenguinPronePose {
      * Applies the single whole-body transform in {@link PenguinBodyLayer} before all five roots
      * are drawn. Transform order is translate (neck origin) -> uniform scale -> lay-down rotation.
      * The Y translation is derived from the actual lower bound of the static pose so the belly,
-     * trailing feet and wings sit on the renderer ground plane for both the cube body and each
-     * mesh tier. Z translation puts the body's front neck at the family neck anchor.
+     * trailing feet and wings sit on the renderer ground plane for the loaded mesh tier. Z
+     * translation puts the body's front neck at the family neck anchor.
      */
     static void applyBodyTransform(PoseStack poseStack, PenguinBodyModel penguin,
                                    EntityModel<?> model, PenguinMeshModel mesh) {
         FamilyProfile profile = forModel(model);
-        if (profile == null) {
+        if (profile == null || mesh == null) {
             return;
         }
         BodyOrigin origin = bodyOrigin(profile, floorNegZ(penguin, mesh));
@@ -145,7 +142,7 @@ final class PenguinPronePose {
                           PenguinMeshModel mesh) {
         FamilyProfile profile = forModel(model);
         ModelPart head = PenguinHeadRenderer.headPart(model);
-        if (profile == null || head == null) {
+        if (profile == null || head == null || mesh == null) {
             return;
         }
         BodyOrigin origin = bodyOrigin(profile, floorNegZ(penguin, mesh));
@@ -165,46 +162,15 @@ final class PenguinPronePose {
                 profile.neckZPixels() / PIXELS_PER_BLOCK);
     }
 
+    /** Floor bound of the prepared static pose, measured only from the loaded mesh tier. */
     private static float floorNegZ(PenguinBodyModel penguin, PenguinMeshModel mesh) {
-        if (mesh != null) {
-            synchronized (MESH_FLOOR_NEG_Z) {
-                Float cached = MESH_FLOOR_NEG_Z.get(mesh);
-                if (cached == null) {
-                    cached = mesh.maxNegZ(penguin);
-                    MESH_FLOOR_NEG_Z.put(mesh, cached);
-                }
-                return cached;
+        synchronized (MESH_FLOOR_NEG_Z) {
+            Float cached = MESH_FLOOR_NEG_Z.get(mesh);
+            if (cached == null) {
+                cached = mesh.maxNegZ(penguin);
+                MESH_FLOOR_NEG_Z.put(mesh, cached);
             }
+            return cached;
         }
-        Float cached = cubeFloorNegZ;
-        if (cached == null) {
-            cached = cubeMaxNegZ(penguin);
-            cubeFloorNegZ = cached;
-        }
-        return cached;
-    }
-
-    /**
-     * The lay-down rotation maps local Z to renderer Y, so the lowest point after rotation is the
-     * largest {@code -Z} value in the static pose. Values are block-space after the ModelPart
-     * transforms (the visitor already applies the /16 pixel conversion to cube corners).
-     */
-    private static float cubeMaxNegZ(PenguinBodyModel penguin) {
-        float[] max = {Float.NEGATIVE_INFINITY};
-        Vector3f point = new Vector3f();
-        ModelPart.Visitor visitor = (pose, path, index, cube) -> {
-            for (int corner = 0; corner < 8; corner++) {
-                point.set((corner & 1) == 0 ? cube.minX : cube.maxX,
-                        (corner & 2) == 0 ? cube.minY : cube.maxY,
-                        (corner & 4) == 0 ? cube.minZ : cube.maxZ).div(PIXELS_PER_BLOCK);
-                pose.pose().transformPosition(point);
-                max[0] = Math.max(max[0], -point.z);
-            }
-        };
-        for (ModelPart part : new ModelPart[]{penguin.body(), penguin.rightWing(),
-                penguin.leftWing(), penguin.rightFoot(), penguin.leftFoot()}) {
-            part.visit(new PoseStack(), visitor);
-        }
-        return max[0];
     }
 }
