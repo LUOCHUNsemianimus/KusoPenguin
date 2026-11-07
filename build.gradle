@@ -173,7 +173,8 @@ tasks.matching { it.name == 'runClient' }.configureEach {
 
 tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
 
-// Keep decoder attribution and its source location available in the standalone mod JAR.
+// Include the project license and third-party notices in the standalone mod JAR.
 tasks.named('processResources') {
+    from('LICENSE') { into 'META-INF' }
     from('THIRD_PARTY_NOTICES.md') { into 'META-INF' }
 }

@@ -74,7 +74,7 @@
 ## 开发与来源说明
 
 - 构建：Windows CMD + Java 21，`gradlew.bat build --offline`；客户端 `gradlew.bat runClient --offline`。
-- 第三方组件与许可：见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+- 凑企鹅的原创代码和素材采用 [MIT 许可证](LICENSE)。第三方组件和素材沿用各自条款，见 [第三方声明](THIRD_PARTY_NOTICES.md)。
 - 自定义舞蹈完整规则、网络协议和边界：[docs/CUSTOM_DANCES.md](docs/CUSTOM_DANCES.md)。
 - 音乐、动作、渲染和兼容性细节见 `docs/` 下对应文档；这些文档记录开发验收范围，不等同于对所有环境的保证。
 - 内置 `builtin:hip` / `builtin:pole` 由检入仓库的 GMod Source 归档离线生成，来源、哈希、选取区间与 56→16 重定向说明见 [docs/GMOD_DANCE_SOURCES.md](docs/GMOD_DANCE_SOURCES.md)；用户自行上传的音频、模型或动画，其所有权与许可由上传者负责。

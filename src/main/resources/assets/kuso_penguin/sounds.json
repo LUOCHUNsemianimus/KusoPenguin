@@ -24,5 +24,13 @@
         "stream": false
       }
     ]
+  },
+  "penguin_taunt": {
+    "subtitle": "subtitles.kuso_penguin.penguin_taunt",
+    "sounds": ["kuso_penguin:penguin_taunt"]
+  },
+  "penguin_revival": {
+    "subtitle": "subtitles.kuso_penguin.penguin_revival",
+    "sounds": ["kuso_penguin:penguin_revival"]
   }
 }

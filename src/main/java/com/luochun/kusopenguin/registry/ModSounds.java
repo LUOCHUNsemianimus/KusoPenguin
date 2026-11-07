@@ -29,6 +29,10 @@ public final class ModSounds {
         register("flying_kick");
     public static final DeferredHolder<SoundEvent, SoundEvent> PENGUIN_DEATH =
         register("penguin_death");
+    private static final DeferredHolder<SoundEvent, SoundEvent> PENGUIN_TAUNT =
+        register("penguin_taunt");
+    private static final DeferredHolder<SoundEvent, SoundEvent> PENGUIN_REVIVAL =
+        register("penguin_revival");
 
     // Weak identity keys keep one death sound per entity life. Both PenguinDeathMixin targets
     // (LivingEntity and ServerPlayer) can reach die for the same instance.
@@ -50,6 +54,14 @@ public final class ModSounds {
     /** Called once by the accepted kick, after the server stored its Flight. */
     public static void playKick(LivingEntity entity) {
         play(entity, FLYING_KICK.get());
+    }
+
+    public static void playTaunt(LivingEntity entity) {
+        play(entity, PENGUIN_TAUNT.get());
+    }
+
+    public static void playRevival(LivingEntity entity) {
+        play(entity, PENGUIN_REVIVAL.get());
     }
 
     /**

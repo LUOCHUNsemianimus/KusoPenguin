@@ -2,6 +2,7 @@ package com.luochun.kusopenguin.animation;
 
 import com.luochun.kusopenguin.KusoPenguin;
 import com.luochun.kusopenguin.registry.ModEffects;
+import com.luochun.kusopenguin.registry.ModSounds;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -28,7 +29,9 @@ public final class PenguinPoseSync {
 
     /** Compatibility entry point used when the penguin effect is added. */
     public static void started(LivingEntity entity){
-        start(entity,PenguinAction.TAUNT);
+        if(start(entity,PenguinAction.TAUNT)){
+            ModSounds.playTaunt(entity);
+        }
     }
 
     /** Unified server state boundary for every action. */

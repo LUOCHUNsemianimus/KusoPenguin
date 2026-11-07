@@ -1,5 +1,8 @@
 # Third-Party Notices
 
+The [MIT license](LICENSE) applies to Kuso Penguin's original code and assets.
+Third-party components and materials remain subject to their respective terms.
+
 ## JLayer 1.0.1
 
 - Component: JLayer MP3 decoder/player/converter library (`javazoom:jlayer:1.0.1`)
@@ -15,3 +18,10 @@
   <https://repo.maven.apache.org/maven2/javazoom/jlayer/1.0.1/jlayer-1.0.1-sources.jar>
 - JLayer remains a separate, unmodified nested JAR (`META-INF/jarjar/`); its license does
   not relicense the mod's own code or assets.
+
+## GMod dance material
+
+The archived GMod animation sources and bind data, along with third-party
+material in the derived hip and pole dance clips, are outside the scope of
+Kuso Penguin's MIT grant. See the [source and export notes](docs/GMOD_DANCE_SOURCES.md)
+for provenance.

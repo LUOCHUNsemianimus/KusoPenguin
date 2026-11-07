@@ -4,6 +4,7 @@ import com.luochun.kusopenguin.KusoPenguin;
 import com.luochun.kusopenguin.animation.PenguinKick;
 import com.luochun.kusopenguin.compat.MaidRevivalCompat;
 import com.luochun.kusopenguin.registry.ModEffects;
+import com.luochun.kusopenguin.registry.ModSounds;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -82,6 +83,7 @@ public final class RevivalManager {
     }
 
     private static void danceStart(ServerPlayer caster, long startTick, int session) {
+        ModSounds.playRevival(caster);
         DanceHook hook = danceHook;
         if (hook != null) {
             hook.onRevivalStart(caster, startTick, session);
