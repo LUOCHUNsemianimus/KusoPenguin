@@ -1,8 +1,10 @@
 package com.luochun.kusopenguin.client.compat;
 
+import com.luochun.kusopenguin.client.BossDancePose;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.model.geom.ModelPart;
+import org.joml.Matrix4f;
 
 /**
  * Immutable set of retained native terminals for one render pass.
@@ -46,7 +48,18 @@ final class NativeRetainedGeometry {
     /** Replays the retained terminals into the caller-provided native buffer and color. */
     void render(PoseStack poseStack, VertexConsumer buffer, int packedLight, int packedOverlay,
                 int color) {
-        for (NativeModelPartRig.JointPath path : terminals) {
+        render(poseStack, buffer, packedLight, packedOverlay, color, null, -1);
+    }
+
+    /**
+     * Same replay with one optional rigid pose-stack correction applied to the explicitly matching
+     * head terminal only. The correction is native model pixels and is converted exactly once; all
+     * other terminals (weapons, snakes, spirit wings) keep their untouched native transforms.
+     */
+    void render(PoseStack poseStack, VertexConsumer buffer, int packedLight, int packedOverlay,
+                int color, Matrix4f pixelHeadCorrection, int headTerminal) {
+        for (int i = 0; i < terminals.length; i++) {
+            NativeModelPartRig.JointPath path = terminals[i];
             ModelPart[] chain = path.chain();
             boolean visible = true;
             for (ModelPart part : chain) {
@@ -60,8 +73,11 @@ final class NativeRetainedGeometry {
             }
             poseStack.pushPose();
             try {
-                for (int i = 0; i < chain.length - 1; i++) {
-                    chain[i].translateAndRotate(poseStack);
+                if (i == headTerminal && pixelHeadCorrection != null) {
+                    poseStack.mulPose(BossDancePose.toBlocks(pixelHeadCorrection));
+                }
+                for (int ancestor = 0; ancestor < chain.length - 1; ancestor++) {
+                    chain[ancestor].translateAndRotate(poseStack);
                 }
                 chain[chain.length - 1].render(poseStack, buffer, packedLight, packedOverlay,
                         color);

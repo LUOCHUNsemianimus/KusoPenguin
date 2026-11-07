@@ -50,9 +50,10 @@ public final class IgnisCompatClient {
         if(dance==null) {
             profile.main.render(stack,nativeBuffer,light,overlay,color);
         } else {
-            // Native head and flame stay untouched; only each anatomical arm subtree receives the
-            // same shoulder delta that its cuff skin uses. Order matches the retained list.
-            profile.head.render(stack,nativeBuffer,light,overlay,color);
+            // Native flame stays untouched; the head and each anatomical arm subtree receive their
+            // own scoped correction from the shared dance sample. Order matches the retained list.
+            renderArm(stack,nativeBuffer,light,overlay,color,profile.head,
+                    dance.headDelta(profile.headPath.current()));
             renderArm(stack,nativeBuffer,light,overlay,color,profile.leftArm,
                     profile.leftDelta(dance));
             renderArm(stack,nativeBuffer,light,overlay,color,profile.rightArm,
@@ -91,7 +92,8 @@ public final class IgnisCompatClient {
         if(dance==null) {
             profile.armor.render(stack,buffer,light,overlay,color);
         } else {
-            profile.head.render(stack,buffer,light,overlay,color);
+            renderArm(stack,buffer,light,overlay,color,profile.head,
+                    dance.headDelta(profile.headPath.current()));
             renderArm(stack,buffer,light,overlay,color,profile.leftArm,
                     profile.leftDelta(dance));
             renderArm(stack,buffer,light,overlay,color,profile.rightArm,
@@ -100,7 +102,7 @@ public final class IgnisCompatClient {
         return true;
     }
 
-    /** Scoped native-arm draw: the pose-stack rotation is always popped, never cached. */
+    /** Scoped native-subtree draw for arms and head: the correction is always popped. */
     private static void renderArm(PoseStack stack,VertexConsumer buffer,int light,int overlay,
             int color,NativeAdvancedRetainedGeometry geometry,Matrix4f pixelDelta) {
         stack.pushPose();
@@ -159,13 +161,14 @@ public final class IgnisCompatClient {
         // No grounding or native leg sampling. The unchanged lowerbody2 supplies animated fire.
         Matrix4f alignment=new Matrix4f().translation(0,neck.y,neck.z)
                 .scale(1.55F);
-        return new Profile(body,left,right,lj,rj,alignment,main,shield,armor,
+        return new Profile(body,left,right,lj,rj,head,alignment,main,shield,armor,
                 danceHead,danceLeft,danceRight,danceFlame);
     }
 
     private record Profile(NativeAdvancedBoxRig.Path body,NativeAdvancedBoxRig.Path left,
                            NativeAdvancedBoxRig.Path right,NativeAdvancedBoxRig.Path leftJoint,
-                           NativeAdvancedBoxRig.Path rightJoint,Matrix4f alignment,
+                           NativeAdvancedBoxRig.Path rightJoint,NativeAdvancedBoxRig.Path headPath,
+                           Matrix4f alignment,
                            NativeAdvancedRetainedGeometry main,NativeAdvancedRetainedGeometry shield,
                            NativeAdvancedRetainedGeometry armor,NativeAdvancedRetainedGeometry head,
                            NativeAdvancedRetainedGeometry leftArm,

@@ -125,7 +125,13 @@ public final class ScyllaCompatClient {
                 world, new Matrix4f(), bind);
         // Finish the native consumer before requesting a different RenderType; a real
         // BufferSource may flush/reuse its builder and invalidate an earlier consumer.
-        profile.main().render(poseStack, nativeBuffer, packedLight, packedOverlay, color);
+        // HEAD is the first main retained terminal; only that subtree gets the rigid neck delta.
+        if (dance == null) {
+            profile.main().render(poseStack, nativeBuffer, packedLight, packedOverlay, color);
+        } else {
+            profile.main().render(poseStack, nativeBuffer, packedLight, packedOverlay, color,
+                    dance.headDelta(profile.head().current()), 0);
+        }
         VertexConsumer penguinBuffer = bufferSource.getBuffer(
                 RenderType.entityCutoutNoCull(PenguinMeshModel.TEXTURE));
         skin.render(poseStack, penguinBuffer, packedLight, packedOverlay, color, pose);
@@ -159,7 +165,20 @@ public final class ScyllaCompatClient {
         if (profile == null) {
             return false;
         }
-        profile.eye().render(poseStack, eyeBuffer, packedLight, packedOverlay, color);
+        // Same game clock and native pelvis sample as the main pass; only the head terminal is
+        // corrected, and the eye texture/alpha/color stay the layer's own.
+        Matrix4f headCorrection = null;
+        PenguinAnimationClip bind = PenguinMeshModel.animationClip();
+        if (bind != null) {
+            Matrix4f[] nativeWorld = profile.world(bind);
+            BossDancePose.Sample dance = BossDancePose.sample(
+                    entity, nativeWorld[PenguinRig.PELVIS], bind);
+            if (dance != null) {
+                headCorrection = dance.headDelta(profile.head().current());
+            }
+        }
+        profile.eye().render(poseStack, eyeBuffer, packedLight, packedOverlay, color,
+                headCorrection, 0);
         return true;
     }
 
@@ -290,7 +309,7 @@ public final class ScyllaCompatClient {
         if (main == null || snake == null || eye == null) {
             return null;
         }
-        return new Profile(rig, main, snake, eye, lArm, lArm2, anchor, rArm, rArm2, chest);
+        return new Profile(rig, main, snake, eye, head, lArm, lArm2, anchor, rArm, rArm2, chest);
     }
 
     private static Matrix4f alignment() {
@@ -304,6 +323,7 @@ public final class ScyllaCompatClient {
 
     private record Profile(NativeModelPartRig rig, NativeRetainedGeometry main,
                            NativeRetainedGeometry snake, NativeRetainedGeometry eye,
+                           NativeModelPartRig.JointPath head,
                            NativeModelPartRig.JointPath leftArm,
                            NativeModelPartRig.JointPath leftForearm,
                            NativeModelPartRig.JointPath anchor,

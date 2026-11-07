@@ -110,7 +110,13 @@ public final class MaledictusCompatClient {
         // The native consumer was acquired by LivingEntityRenderer before this hook. Finish it
         // BEFORE requesting a different render type: BufferSource may flush/reuse its builder,
         // making a retained reference to the previous native consumer invalid ("Not building!").
-        profile.retained().render(poseStack, nativeBuffer, packedLight, packedOverlay, color);
+        // HEAD is the first retained terminal; only that subtree gets the rigid neck delta.
+        if (dance == null) {
+            profile.retained().render(poseStack, nativeBuffer, packedLight, packedOverlay, color);
+        } else {
+            profile.retained().render(poseStack, nativeBuffer, packedLight, packedOverlay, color,
+                    dance.headDelta(profile.head().current()), 0);
+        }
         // Main pass owns the one and only penguin body draw. The ghost layer below only draws the
         // retained native head/weapons/spirit-wing geometry with its native ghost material.
         VertexConsumer penguinBuffer = bufferSource.getBuffer(
@@ -131,7 +137,20 @@ public final class MaledictusCompatClient {
         if (profile == null) {
             return false;
         }
-        profile.retained().render(poseStack, ghostBuffer, packedLight, packedOverlay, color);
+        // Evaluate the same game clock and native pelvis as the main pass. Only the first retained
+        // terminal (head) is corrected; weapons and spirit wings keep their native transforms.
+        Matrix4f headCorrection = null;
+        PenguinAnimationClip bind = PenguinMeshModel.animationClip();
+        if (bind != null) {
+            Matrix4f[] nativeWorld = profile.rig().world(bind);
+            BossDancePose.Sample dance = BossDancePose.sample(
+                    entity, nativeWorld[PenguinRig.PELVIS], bind);
+            if (dance != null) {
+                headCorrection = dance.headDelta(profile.head().current());
+            }
+        }
+        profile.retained().render(poseStack, ghostBuffer, packedLight, packedOverlay, color,
+                headCorrection, 0);
         return true;
     }
 
@@ -172,6 +191,7 @@ public final class MaledictusCompatClient {
                 || head == null) {
             return null;
         }
+        NativeModelPartRig.JointPath headPath = NativeModelPartRig.path(root, HEAD);
         // Pinned native bind anchors. A different model version must keep its complete native
         // renderer instead of receiving the wrong penguin alignment.
         if (!NativeModelPartRig.rest(roots, 0.0F, 24.0F, 0.0F)
@@ -210,7 +230,7 @@ public final class MaledictusCompatClient {
         NativeRetainedGeometry retained = NativeRetainedGeometry.resolve(root,
                 HEAD, RIGHT_MACE, LEFT_MACE, BOW, HALBERD, SPIRIT_LEFT_WING,
                 SPIRIT_RIGHT_WING);
-        return retained == null ? null : new Profile(rig, retained);
+        return retained == null ? null : new Profile(rig, headPath, retained);
     }
 
     private static Matrix4f alignment() {
@@ -222,6 +242,7 @@ public final class MaledictusCompatClient {
                 .translate(0.0F, -GROUND_Y, 0.0F);
     }
 
-    private record Profile(NativeModelPartRig rig, NativeRetainedGeometry retained) {
+    private record Profile(NativeModelPartRig rig, NativeModelPartRig.JointPath head,
+                           NativeRetainedGeometry retained) {
     }
 }

@@ -4,7 +4,7 @@ license = "All Rights Reserved"
 
 [[mods]]
 modId = "kuso_penguin"
-version = "1.0.0_beta"
+version = "1.0.1beta"
 displayName = "凑企鹅 / Kuso Penguin"
 description = "把玩家和各种生物变成企鹅，并支持自定义企鹅舞蹈。 / Turn players and various creatures into penguins, with custom penguin dances."
 
