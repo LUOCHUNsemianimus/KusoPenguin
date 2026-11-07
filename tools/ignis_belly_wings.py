@@ -1,4 +1,9 @@
-"""Canonical closed three-link belly flippers; runtime and BBS share face ownership."""
+"""Canonical closed three-link belly flippers; runtime and BBS share face ownership.
+
+Every generated vertex is bound rigidly to one dedicated Ignis channel: positive-X flipper
+triangles (body faces 268..303) use channel 5, negative-X (304..339) use channel 8. The native
+cuff channels 4/7 stay exclusive to the separate short sleeves.
+"""
 import hashlib
 import math
 
@@ -37,6 +42,8 @@ def build_wings(source, body_faces, front_z, normal):
     triangles, segments = [], []
     tips = []
     for side, mirror in [('right', 1), ('left', -1)]:
+        # Dedicated unused Ignis channels keep the flippers off the native arm/cuff bones.
+        rigid_joint = 5 if mirror == 1 else 8
         parent = 'body'
         for index, name in enumerate(['upper', 'fore', 'tip']):
             a, b = centers[index], centers[index+1]
@@ -75,7 +82,8 @@ def build_wings(source, body_faces, front_z, normal):
                 if sum(center[k]*n[k] for k in range(3)) < 0:
                     q, r = r, q
                     n = normal(p, q, r)
-                triangles.append([list(v)+source['black_uv']+n+[1, 1, 0] for v in (p, q, r)])
+                triangles.append([list(v)+source['black_uv']+n+[rigid_joint, rigid_joint, 0]
+                                  for v in (p, q, r)])
             segment_id = 'belly_'+side+'_'+name
             segments.append({'id': segment_id, 'side': side, 'name': name, 'parent': parent,
                              'pivot': [a[0]*mirror, a[1], a[2]-penetration],

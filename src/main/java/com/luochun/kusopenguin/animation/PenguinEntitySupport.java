@@ -86,6 +86,14 @@ public final class PenguinEntitySupport {
     }
 
     /**
+     * Exact three-boss K-dance target set. Ender Guardian is deliberately excluded and this
+     * predicate does not widen either generic eligibility list.
+     */
+    public static boolean isDanceBoss(EntityType<?> type) {
+        return isIgnis(type) || isScylla(type) || isMaledictus(type);
+    }
+
+    /**
      * Union used by action exclusion and boss diagnostics. Each bridge gates on its own exact
      * model class, so this union cannot make one boss accept the other's model.
      */

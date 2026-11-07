@@ -46,5 +46,10 @@ public final class DanceNetwork {
             (payload, context) -> context.enqueueWork(() -> DanceClientHooks.receive(payload)));
         registrar.playToClient(DancePackets.Playback.TYPE, DancePackets.Playback.STREAM_CODEC,
             (payload, context) -> context.enqueueWork(() -> DanceClientHooks.receive(payload)));
+        // Optional so a client without this exact marker still connects; the server also checks the
+        // channel before sending, and the marker carries no client-supplied authority.
+        registrar.optional().playToClient(DancePackets.FakeTargetMarker.TYPE,
+            DancePackets.FakeTargetMarker.STREAM_CODEC,
+            (payload, context) -> context.enqueueWork(() -> DanceClientHooks.receive(payload)));
     }
 }

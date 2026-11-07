@@ -1,6 +1,7 @@
 package com.luochun.kusopenguin.client.compat;
 
 import com.luochun.kusopenguin.animation.PenguinEntitySupport;
+import com.luochun.kusopenguin.client.BossDancePose;
 import com.luochun.kusopenguin.client.PenguinAnimationClip;
 import com.luochun.kusopenguin.client.PenguinAnimationPose;
 import com.luochun.kusopenguin.client.PenguinMeshModel;
@@ -116,7 +117,10 @@ public final class ScyllaCompatClient {
         if (bind == null || skin == null) {
             return false;
         }
-        Matrix4f[] world = profile.world(bind);
+        Matrix4f[] nativeWorld = profile.world(bind);
+        BossDancePose.Sample dance = BossDancePose.sample(
+                entity, nativeWorld[PenguinRig.PELVIS], bind);
+        Matrix4f[] world = dance == null ? nativeWorld : dance.placed();
         PenguinAnimationPose pose = PenguinRenderContext.fromNativeRig(
                 world, new Matrix4f(), bind);
         // Finish the native consumer before requesting a different RenderType; a real

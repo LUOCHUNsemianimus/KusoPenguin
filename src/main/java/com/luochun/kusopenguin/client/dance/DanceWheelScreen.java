@@ -16,6 +16,8 @@ public final class DanceWheelScreen extends Screen {
     private static final double SECTOR = Math.PI / 4.0D;
 
     private final UUID target;
+    /** Actual boss display name for a captured boss target; {@code null} keeps self/maid labels. */
+    private final Component targetName;
     private int centerX;
     private int centerY;
     private int radius;
@@ -23,8 +25,17 @@ public final class DanceWheelScreen extends Screen {
     private int hovered = -1;
 
     public DanceWheelScreen(UUID target) {
+        this(target, null);
+    }
+
+    /**
+     * Captured exact-target overload. Boss callers pass {@link net.minecraft.world.entity.Entity#getDisplayName()}
+     * so the existing wheel shows the real target name without a new translation key.
+     */
+    public DanceWheelScreen(UUID target, Component targetName) {
         super(Component.translatable("gui.kuso_penguin.dance.wheel.title"));
         this.target = target;
+        this.targetName = targetName;
     }
 
     @Override
@@ -96,7 +107,7 @@ public final class DanceWheelScreen extends Screen {
         Prefs prefs = DanceClient.prefs();
         drawWedges(graphics, prefs);
         graphics.drawCenteredString(font, getTitle(), width / 2, 8, 0xFFFFFF);
-        Component targetLabel = Component.translatable(target != null
+        Component targetLabel = targetName != null ? targetName : Component.translatable(target != null
             && target.equals(net.minecraft.client.Minecraft.getInstance().player == null
                 ? null : net.minecraft.client.Minecraft.getInstance().player.getUUID())
             ? "gui.kuso_penguin.dance.wheel.self"

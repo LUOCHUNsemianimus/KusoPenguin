@@ -18,6 +18,9 @@ public final class DanceClientHooks {
 
         default void onPlayback(DancePackets.Playback payload) {
         }
+
+        default void onFakeTargetMarker(DancePackets.FakeTargetMarker payload) {
+        }
     }
 
     private static volatile Listener listener;
@@ -54,6 +57,13 @@ public final class DanceClientHooks {
         Listener current = listener;
         if (current != null) {
             current.onPlayback(payload);
+        }
+    }
+
+    public static void receive(DancePackets.FakeTargetMarker payload) {
+        Listener current = listener;
+        if (current != null) {
+            current.onFakeTargetMarker(payload);
         }
     }
 }

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "runtime_mesh_sha256": "ff9516356ab27da959f05929a05e2bfa42f5d0d19822a08082875250d2464ae3",
+  "runtime_mesh_sha256": "3cd3647390fda2ddd1b293d2bc5e18098093f5e1a2c29e2c8342cb50f77725f6",
   "body_base_triangle_count": 268,
   "tip_gap": 0.79093726,
   "segments": [

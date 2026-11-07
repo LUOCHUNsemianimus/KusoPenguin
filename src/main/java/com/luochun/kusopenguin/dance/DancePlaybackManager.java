@@ -1,8 +1,10 @@
 package com.luochun.kusopenguin.dance;
 
 import com.luochun.kusopenguin.KusoPenguin;
+import com.luochun.kusopenguin.animation.PenguinEntitySupport;
 import com.luochun.kusopenguin.animation.PenguinKick;
 import com.luochun.kusopenguin.compat.MelodiesDanceCompat;
+import com.luochun.kusopenguin.compat.SiliconeDollsCompat;
 import com.luochun.kusopenguin.music.DanceManager;
 import com.luochun.kusopenguin.music.MusicSessions;
 import com.luochun.kusopenguin.registry.ModEffects;
@@ -22,6 +24,8 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
@@ -29,6 +33,7 @@ import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.network.registration.NetworkRegistry;
 
 /**
  * One bounded, server-authoritative actor map for the new dance selection channels.
@@ -50,6 +55,10 @@ public final class DancePlaybackManager {
     public static final int MAX_ACTORS = 256;
     /** Manual maid selection range, checked on the server regardless of any client raycast. */
     public static final double MANUAL_MAID_RANGE = 4.0D;
+    /** Direct K boss view ray length. Range is measured to the native bounding box, not centre. */
+    private static final double MANUAL_BOSS_RANGE = 4.0D;
+    /** Small network-timing tolerance around the actual boss box for the view ray test. */
+    private static final double BOSS_RAY_TOLERANCE = 0.25D;
     /** Maid-music trigger range around the performing maid. */
     public static final double MAID_MUSIC_RANGE = 12.0D;
     private static final int SCAN_INTERVAL = 5;
@@ -145,6 +154,7 @@ public final class DancePlaybackManager {
     /** Consulted by the existing Mob AI mixin so a manual/maid-music dancer is transiently paused. */
     public static boolean pausesAI(Mob mob) {
         if (mob == null || !(mob.level() instanceof ServerLevel level)
+                || PenguinEntitySupport.isDanceBoss(mob.getType())
                 || !mob.hasEffect(ModEffects.PENGUIN)) {
             return false;
         }
@@ -156,7 +166,8 @@ public final class DancePlaybackManager {
 
     /** True while this entity is owned by a transient AI-pausing dance source. */
     public static boolean ownsTransientAI(LivingEntity entity) {
-        if (entity == null || !(entity.level() instanceof ServerLevel level)) {
+        if (entity == null || !(entity.level() instanceof ServerLevel level)
+                || PenguinEntitySupport.isDanceBoss(entity.getType())) {
             return false;
         }
         ServerState state = STATES.get(level.getServer());
@@ -181,29 +192,65 @@ public final class DancePlaybackManager {
     private static void play(ServerPlayer player, DancePackets.Control control) {
         ServerLevel level = player.serverLevel();
         LivingEntity target;
+        boolean protectedTarget = false;
         if (control.target().equals(player.getUUID())) {
             target = player;
         } else {
             Entity found = level.getEntity(control.target());
-            if (!(found instanceof LivingEntity living) || !MelodiesDanceCompat.isMaid(living)) {
+            if (!(found instanceof LivingEntity living)) {
                 reply(player, control, false, "message.kuso_penguin.dance.target_invalid");
                 return;
             }
-            UUID owner = MelodiesDanceCompat.maidOwner(living);
-            if (owner == null || !owner.equals(player.getUUID())) {
-                reply(player, control, false, "message.kuso_penguin.dance.not_owner");
+            if (PenguinEntitySupport.isDanceBoss(living.getType())) {
+                // Exact three-boss route: the wheel's selected builtin/uploaded clip still passes
+                // the target/owner/range/LOS/effect/busy gates and the library selectable check
+                // below; only the previous cycle-only restriction is removed.
+                if (!living.isAlive() || living.isRemoved()
+                        || !living.hasEffect(ModEffects.PENGUIN)) {
+                    reply(player, control, false, "message.kuso_penguin.dance.effect_required");
+                    return;
+                }
+                if (!bossInView(player, living)) {
+                    reply(player, control, false, "message.kuso_penguin.dance.target_range");
+                    return;
+                }
+                target = living;
+                protectedTarget = true;
+            } else if (SiliconeDollsCompat.isDanceTarget(living)) {
+                // Another exact manual target: same alive/transformed/same-level/range/view-ray
+                // gates as the boss route, then the shared busy/selectable/owner checks below.
+                if (living.level() != player.level() || !living.isAlive() || living.isRemoved()
+                        || !living.hasEffect(ModEffects.PENGUIN)) {
+                    reply(player, control, false, "message.kuso_penguin.dance.effect_required");
+                    return;
+                }
+                if (!bossInView(player, living)) {
+                    reply(player, control, false, "message.kuso_penguin.dance.target_range");
+                    return;
+                }
+                target = living;
+                protectedTarget = true;
+            } else if (MelodiesDanceCompat.isMaid(living)) {
+                UUID owner = MelodiesDanceCompat.maidOwner(living);
+                if (owner == null || !owner.equals(player.getUUID())) {
+                    reply(player, control, false, "message.kuso_penguin.dance.not_owner");
+                    return;
+                }
+                if (!living.isAlive() || living.isRemoved()
+                        || !living.hasEffect(ModEffects.PENGUIN)) {
+                    reply(player, control, false, "message.kuso_penguin.dance.effect_required");
+                    return;
+                }
+                if (player.distanceToSqr(living) > MANUAL_MAID_RANGE * MANUAL_MAID_RANGE
+                        || !player.hasLineOfSight(living)) {
+                    reply(player, control, false, "message.kuso_penguin.dance.target_range");
+                    return;
+                }
+                target = living;
+            } else {
+                reply(player, control, false, "message.kuso_penguin.dance.target_invalid");
                 return;
             }
-            if (!living.isAlive() || living.isRemoved() || !living.hasEffect(ModEffects.PENGUIN)) {
-                reply(player, control, false, "message.kuso_penguin.dance.effect_required");
-                return;
-            }
-            if (player.distanceToSqr(living) > MANUAL_MAID_RANGE * MANUAL_MAID_RANGE
-                    || !player.hasLineOfSight(living)) {
-                reply(player, control, false, "message.kuso_penguin.dance.target_range");
-                return;
-            }
-            target = living;
         }
         if (!player.isAlive() || !player.hasEffect(ModEffects.PENGUIN)) {
             reply(player, control, false, "message.kuso_penguin.dance.effect_required");
@@ -226,6 +273,10 @@ public final class DancePlaybackManager {
         ServerState state = state(player.getServer());
         Actor actor = state.actors.get(target.getUUID());
         Layer existing = actor == null ? null : actor.layers.get(Source.MANUAL);
+        if (protectedTarget && existing != null && !existing.owner.equals(player.getUUID())) {
+            reply(player, control, false, "message.kuso_penguin.dance.not_owner");
+            return;
+        }
         if (existing != null && existing.owner.equals(player.getUUID())
                 && existing.clipId.equals(control.clipId())) {
             // Repeating the exact same manual clip toggles it off.
@@ -240,6 +291,20 @@ public final class DancePlaybackManager {
         }
         // ACK only after the authoritative layer exists and its playback was published.
         reply(player, control, true, "message.kuso_penguin.dance.started");
+    }
+
+    /** Server view ray against the actual native box, with no large-boss centre-distance test. */
+    private static boolean bossInView(ServerPlayer player, LivingEntity boss) {
+        if (!player.hasLineOfSight(boss)) {
+            return false;
+        }
+        AABB box = boss.getBoundingBox().inflate(BOSS_RAY_TOLERANCE);
+        Vec3 eye = player.getEyePosition();
+        if (box.contains(eye)) {
+            return true;
+        }
+        Vec3 end = eye.add(player.getViewVector(1.0F).normalize().scale(MANUAL_BOSS_RANGE));
+        return box.clip(eye, end).isPresent();
     }
 
     private static void stop(ServerPlayer player, DancePackets.Control control) {
@@ -289,7 +354,10 @@ public final class DancePlaybackManager {
                 performer, revivalSession);
         actor.layers.put(source, layer);
         publish(actor);
-        if (source == Source.MANUAL || source == Source.MAID_MUSIC) {
+        // Exact visual-only bosses keep their native navigation/AI/combat; previous maid behavior
+        // is unchanged because only the three dance-boss registry ids are excluded.
+        if ((source == Source.MANUAL || source == Source.MAID_MUSIC)
+                && !PenguinEntitySupport.isDanceBoss(entity.getType())) {
             stopNavigation(entity);
         }
         return true;
@@ -334,9 +402,14 @@ public final class DancePlaybackManager {
         if (entity == null || layer == null || layer.clipId.isEmpty()) {
             return;
         }
-        PacketDistributor.sendToPlayersTrackingEntityAndSelf(entity,
-                new DancePackets.Playback(actor.dimension, actor.entityId, layer.session,
-                        layer.clipId, layer.startTick, layer.source, playing));
+        DancePackets.Playback payload = new DancePackets.Playback(actor.dimension, actor.entityId,
+                layer.session, layer.clipId, layer.startTick, layer.source, playing);
+        // A SiliconeDolls fake player has a dummy self connection; trackers only, never send to it.
+        if (SiliconeDollsCompat.isDanceTarget(entity)) {
+            PacketDistributor.sendToPlayersTrackingEntity(entity, payload);
+        } else {
+            PacketDistributor.sendToPlayersTrackingEntityAndSelf(entity, payload);
+        }
     }
 
     private static void sendTo(ServerPlayer player, Actor actor, boolean playing) {
@@ -587,6 +660,7 @@ public final class DancePlaybackManager {
                 || !(event.getTarget() instanceof LivingEntity target)) {
             return;
         }
+        sendFakeTargetMarker(player, target, true);
         ServerState state = player.getServer() == null ? null : STATES.get(player.getServer());
         Actor actor = state == null ? null : state.actors.get(target.getUUID());
         if (actor != null) {
@@ -600,12 +674,30 @@ public final class DancePlaybackManager {
                 || !(event.getTarget() instanceof LivingEntity target)) {
             return;
         }
+        sendFakeTargetMarker(player, target, false);
         ServerState state = player.getServer() == null ? null : STATES.get(player.getServer());
         Actor actor = state == null ? null : state.actors.get(target.getUUID());
         if (actor != null) {
             // Release the tracker's view without touching the authoritative actor.
             sendTo(player, actor, false);
         }
+    }
+
+    /**
+     * Pushes the sole client-side fake identity for an exact non-shadow SiliconeDolls target. The
+     * channel probe skips dummy/non-modded recipients; the marker carries no client authority.
+     */
+    private static void sendFakeTargetMarker(ServerPlayer recipient, LivingEntity target,
+                                             boolean tracked) {
+        if (recipient == null || target == null || SiliconeDollsCompat.isDanceTarget(recipient)
+                || !SiliconeDollsCompat.isDanceTarget(target)
+                || recipient.connection == null
+                || !NetworkRegistry.hasChannel(recipient.connection,
+                        DancePackets.FakeTargetMarker.TYPE.id())) {
+            return;
+        }
+        PacketDistributor.sendToPlayer(recipient, new DancePackets.FakeTargetMarker(
+                target.getUUID(), target.level().dimension().location(), tracked));
     }
 
     @SubscribeEvent

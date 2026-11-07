@@ -162,6 +162,15 @@ public final class PenguinMaidPosture {
     }
 
     /**
+     * The exact TLM chair seat and the floor sitting pose keep the instrument pose: their seat fit
+     * runs first and the shared IM wing snapshot is layered over it. Every other maid support keeps
+     * its native pose.
+     */
+    boolean allowsInstrumentPose() {
+        return this.kind == Kind.CHAIR_SIT || this.kind == Kind.FLOOR_SIT;
+    }
+
+    /**
      * Seat fit, evaluated after the adapter copied the native pose. The two short foot roots are
      * folded first, then the weighted assembly is measured and all five roots move together by one
      * signed correction to the actual contact height. The native head is re-anchored to the

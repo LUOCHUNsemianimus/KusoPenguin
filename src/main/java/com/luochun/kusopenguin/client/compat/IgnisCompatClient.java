@@ -1,6 +1,7 @@
 package com.luochun.kusopenguin.client.compat;
 
 import com.luochun.kusopenguin.animation.PenguinEntitySupport;
+import com.luochun.kusopenguin.client.BossDancePose;
 import com.luochun.kusopenguin.client.PenguinAnimationClip;
 import com.luochun.kusopenguin.client.PenguinMeshModel;
 import com.luochun.kusopenguin.client.PenguinRenderContext;
@@ -41,9 +42,23 @@ public final class IgnisCompatClient {
         if(profile==null) return false;
         PenguinAnimationClip bind=PenguinMeshModel.animationClip();
         PenguinSkinnedMesh skin=PenguinMeshModel.ignisSkin();
-        Matrix4f[] world=profile.world(bind);
+        Matrix4f[] nativeWorld=profile.world(bind);
+        BossDancePose.Sample dance=BossDancePose.sample(entity,
+                nativeWorld[PenguinRig.PELVIS],bind);
+        Matrix4f[] world=dance==null?nativeWorld:profile.dancedWorld(dance,bind);
         // Submit retained native geometry before asking for a new material (BufferSource flush).
-        profile.main.render(stack,nativeBuffer,light,overlay,color);
+        if(dance==null) {
+            profile.main.render(stack,nativeBuffer,light,overlay,color);
+        } else {
+            // Native head and flame stay untouched; only each anatomical arm subtree receives the
+            // same shoulder delta that its cuff skin uses. Order matches the retained list.
+            profile.head.render(stack,nativeBuffer,light,overlay,color);
+            renderArm(stack,nativeBuffer,light,overlay,color,profile.leftArm,
+                    profile.leftDelta(dance));
+            renderArm(stack,nativeBuffer,light,overlay,color,profile.rightArm,
+                    profile.rightDelta(dance));
+            profile.flame.render(stack,nativeBuffer,light,overlay,color);
+        }
         VertexConsumer penguin=buffers.getBuffer(RenderType.entityCutoutNoCull(PenguinMeshModel.TEXTURE));
         skin.render(stack,penguin,light,overlay,color,
                 PenguinRenderContext.fromNativeRig(world,new Matrix4f(),bind));
@@ -55,7 +70,14 @@ public final class IgnisCompatClient {
             PoseStack stack,VertexConsumer buffer,int light,int overlay,int color) {
         Profile profile=replacementProfile(entity,model);
         if(profile==null) return false;
-        profile.shield.render(stack,buffer,light,overlay,color);
+        PenguinAnimationClip bind=PenguinMeshModel.animationClip();
+        BossDancePose.Sample dance=BossDancePose.sample(entity,profile.ordinaryPelvis(bind),bind);
+        if(dance==null) {
+            profile.shield.render(stack,buffer,light,overlay,color);
+        } else {
+            renderArm(stack,buffer,light,overlay,color,profile.shield,
+                    profile.leftDelta(dance));
+        }
         return true;
     }
 
@@ -64,8 +86,30 @@ public final class IgnisCompatClient {
             PoseStack stack,VertexConsumer buffer,int light,int overlay,int color) {
         Profile profile=replacementProfile(entity,model);
         if(profile==null) return false;
-        profile.armor.render(stack,buffer,light,overlay,color);
+        PenguinAnimationClip bind=PenguinMeshModel.animationClip();
+        BossDancePose.Sample dance=BossDancePose.sample(entity,profile.ordinaryPelvis(bind),bind);
+        if(dance==null) {
+            profile.armor.render(stack,buffer,light,overlay,color);
+        } else {
+            profile.head.render(stack,buffer,light,overlay,color);
+            renderArm(stack,buffer,light,overlay,color,profile.leftArm,
+                    profile.leftDelta(dance));
+            renderArm(stack,buffer,light,overlay,color,profile.rightArm,
+                    profile.rightDelta(dance));
+        }
         return true;
+    }
+
+    /** Scoped native-arm draw: the pose-stack rotation is always popped, never cached. */
+    private static void renderArm(PoseStack stack,VertexConsumer buffer,int light,int overlay,
+            int color,NativeAdvancedRetainedGeometry geometry,Matrix4f pixelDelta) {
+        stack.pushPose();
+        try {
+            stack.mulPose(BossDancePose.toBlocks(pixelDelta));
+            geometry.render(stack,buffer,light,overlay,color);
+        } finally {
+            stack.popPose();
+        }
     }
 
     private static Profile replacementProfile(LivingEntity entity,EntityModel<?> model) {
@@ -103,22 +147,40 @@ public final class IgnisCompatClient {
         NativeAdvancedRetainedGeometry armor=NativeAdvancedRetainedGeometry.resolve(model,
                 HEAD,LEFT_ARM,RIGHT_ARM);
         NativeAdvancedRetainedGeometry shield=NativeAdvancedRetainedGeometry.resolve(model,SHIELD);
-        if(main==null||shield==null||armor==null) return null;
+        // Dance needs the same retained pieces as separately transformable arm subtrees.
+        NativeAdvancedRetainedGeometry danceHead=NativeAdvancedRetainedGeometry.resolve(model,HEAD);
+        NativeAdvancedRetainedGeometry danceLeft=NativeAdvancedRetainedGeometry.resolve(model,LEFT_ARM);
+        NativeAdvancedRetainedGeometry danceRight=NativeAdvancedRetainedGeometry.resolve(model,RIGHT_ARM);
+        NativeAdvancedRetainedGeometry danceFlame=NativeAdvancedRetainedGeometry.resolve(model,FLAME);
+        if(main==null||shield==null||armor==null||danceHead==null||danceLeft==null
+                ||danceRight==null||danceFlame==null) return null;
         Vector3f neck=head.initial().transformPosition(new Vector3f());
         // Float above the ground: original fat body uniformly scaled, with room for downward-pointing toes.
         // No grounding or native leg sampling. The unchanged lowerbody2 supplies animated fire.
         Matrix4f alignment=new Matrix4f().translation(0,neck.y,neck.z)
                 .scale(1.55F);
-        return new Profile(body,left,right,alignment,main,shield,armor);
+        return new Profile(body,left,right,lj,rj,alignment,main,shield,armor,
+                danceHead,danceLeft,danceRight,danceFlame);
     }
 
     private record Profile(NativeAdvancedBoxRig.Path body,NativeAdvancedBoxRig.Path left,
-                           NativeAdvancedBoxRig.Path right,Matrix4f alignment,
+                           NativeAdvancedBoxRig.Path right,NativeAdvancedBoxRig.Path leftJoint,
+                           NativeAdvancedBoxRig.Path rightJoint,Matrix4f alignment,
                            NativeAdvancedRetainedGeometry main,NativeAdvancedRetainedGeometry shield,
-                           NativeAdvancedRetainedGeometry armor) {
+                           NativeAdvancedRetainedGeometry armor,NativeAdvancedRetainedGeometry head,
+                           NativeAdvancedRetainedGeometry leftArm,
+                           NativeAdvancedRetainedGeometry rightArm,
+                           NativeAdvancedRetainedGeometry flame) {
+        Matrix4f bodySkin() {
+            return body.current().mul(body.initial().invert()).mul(new Matrix4f(alignment));
+        }
+
+        Matrix4f ordinaryPelvis(PenguinAnimationClip bind) {
+            return new Matrix4f(bodySkin()).translate(bind.bind(PenguinRig.PELVIS));
+        }
+
         Matrix4f[] world(PenguinAnimationClip bind) {
-            Matrix4f delta=body.current().mul(body.initial().invert());
-            Matrix4f bodySkin=delta.mul(new Matrix4f(alignment));
+            Matrix4f bodySkin=bodySkin();
             Matrix4f[] world=new Matrix4f[PenguinRig.COUNT];
             for(int i=0;i<world.length;i++) world[i]=new Matrix4f(bodySkin).translate(bind.bind(i));
             // Fixed ankle pitch, not an animation channel. Hip/knee and welded belly vertices
@@ -132,11 +194,55 @@ public final class IgnisCompatClient {
             // Rigid cuffs are authored relative to their fixed wing pivots. Absolute arm frames
             // cancel those pivots through inverseBind, following native pre-bend with no stretch.
             // A2px inward cuff overlap closes the gap to the unchanged narrow penguin shoulders.
+            // Only channels 4/7 carry cuff geometry; 5/8 keep bodySkin*T(bindJoint) so the idle
+            // belly flippers stay exactly on the body.
             Matrix4f plus=left.current().translate(-2.0F,0,0).scale(1.8F,1.15F,1.15F);
             Matrix4f minus=right.current().translate(2.0F,0,0).scale(1.8F,1.15F,1.15F);
-            for(int i=4;i<=6;i++) world[i]=new Matrix4f(plus);
-            for(int i=7;i<=9;i++) world[i]=new Matrix4f(minus);
+            world[4]=new Matrix4f(plus);
+            world[7]=new Matrix4f(minus);
             return world;
+        }
+
+        /** Dance body placement, with cuffs kept on their ordinary absolute native sockets. */
+        Matrix4f[] dancedWorld(BossDancePose.Sample dance,PenguinAnimationClip bind) {
+            Matrix4f[] world=dance.placed();
+            Matrix4f leftDelta=leftDelta(dance);
+            Matrix4f rightDelta=rightDelta(dance);
+            // The raw sampled cuff matrices are deliberately not used: the existing socket,
+            // overlap and scale stay, rotated by the dance wing delta around the same shoulder.
+            // Only channels 4/7 own the cuffs.
+            Matrix4f plus=left.current().translate(-2.0F,0,0).scale(1.8F,1.15F,1.15F);
+            Matrix4f minus=right.current().translate(2.0F,0,0).scale(1.8F,1.15F,1.15F);
+            world[4]=new Matrix4f(leftDelta).mul(plus);
+            world[7]=new Matrix4f(rightDelta).mul(minus);
+            // Belly flippers use the sampled pelvis as body skin base, then rotate around their
+            // actual upper roots by the same chest-relative wing quaternion as the native arms.
+            Matrix4f bodySkin=new Matrix4f(world[PenguinRig.PELVIS])
+                    .translate(bind.bind(PenguinRig.PELVIS).negate());
+            world[5]=bellyWorld(bodySkin,dance,PenguinRig.RIGHT_WING,
+                    new Vector3f(5.45F,2.6F,.2F),bind.bind(5));
+            world[8]=bellyWorld(bodySkin,dance,PenguinRig.LEFT_WING,
+                    new Vector3f(-5.45F,2.6F,.2F),bind.bind(8));
+            return world;
+        }
+
+        /** Rigid body-shoulder delta for one belly flipper channel. */
+        private static Matrix4f bellyWorld(Matrix4f bodySkin,BossDancePose.Sample dance,int wing,
+                Vector3f pivot,Vector3f bindJoint) {
+            return new Matrix4f(bodySkin)
+                    .translate(pivot)
+                    .rotate(dance.wingRotation(wing))
+                    .translate(-pivot.x,-pivot.y,-pivot.z)
+                    .translate(bindJoint);
+        }
+
+        /** Positive-X penguin wing maps to the native anatomical left arm. */
+        Matrix4f leftDelta(BossDancePose.Sample dance) {
+            return dance.shoulderDelta(PenguinRig.RIGHT_WING,leftJoint.current());
+        }
+
+        Matrix4f rightDelta(BossDancePose.Sample dance) {
+            return dance.shoulderDelta(PenguinRig.LEFT_WING,rightJoint.current());
         }
     }
 }

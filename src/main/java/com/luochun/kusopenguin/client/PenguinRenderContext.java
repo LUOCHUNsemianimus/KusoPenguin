@@ -130,9 +130,10 @@ public final class PenguinRenderContext {
         return clip!=null&&age>=0&&age<clip.totalDuration();
     }
     /**
-     * One cached instrument snapshot per draw, after death, kick, native/Iron casting and
-     * non-standing posture have kept their priority. Every null path leaves the ordinary prepared
-     * mesh and all native matrices untouched.
+     * One cached instrument snapshot per draw, after death, kick, native/Iron casting and every
+     * non-standing posture except the exact TLM chair seat and the floor sitting pose have kept
+     * their priority. Such a seated maid reuses this same snapshot on top of its seat fit; every
+     * null path leaves the ordinary prepared mesh and all native matrices untouched.
      */
     static PenguinMelodiesCompatClient.Snapshot melodies(){
         Frame f=FRAMES.get().peek();
@@ -147,7 +148,12 @@ public final class PenguinRenderContext {
         if(activeFlyingKick(f))return null;
         PenguinPlayerPosture posture=posture();
         if(posture!=null&&posture.suppressesSpecialClips())return null;
-        if(suppressesSpecialFrames(f.entity))return null;
+        // The native TLM support normally owns the pose. The exact chair seat and the floor sitting
+        // pose are the only exceptions: their fit still runs first, then the shared IM wing snapshot
+        // layers over it. A transformed carrier never gets an instrument snapshot.
+        PenguinMaidPosture maid=maidPosture();
+        if(PenguinMaidPosture.isCarrier(f.entity)
+                ||(maid!=null&&!maid.allowsInstrumentPose()))return null;
         if(PenguinProportions.forModel(f.model)==null
                 ||PenguinPoseAdapters.find(f.model)==null)return null;
         // Only an actual YSM maid render proxy lacks the native player IM progress update. Every
@@ -237,10 +243,17 @@ public final class PenguinRenderContext {
         PenguinPlayerPosture posture=posture();
         if(posture!=null)posture.applyCorrections(penguin,f.model);
         // Native TLM maid support owns the pose. Apply only the two short-foot poses; the body and
-        // root stay exactly where TLM placed them. Instrument/dance clips cannot claim this draw.
+        // root stay exactly where TLM placed them. Instrument/dance clips cannot claim this draw,
+        // except the exact chair seat and the floor sitting pose, which layer the shared IM wing
+        // snapshot after their fit. The standing alignPerformingMaid must not run there or it would
+        // undo the seat/head alignment.
         PenguinMaidPosture maid=maidPosture();
         if(maid!=null){
             maid.applyCorrections(penguin,f.model);
+            if(maid.allowsInstrumentPose()){
+                PenguinMelodiesCompatClient.Snapshot instrument=melodies();
+                if(instrument!=null)instrument.applyTo(penguin);
+            }
             return;
         }
         // A transformed carrier keeps TLM's native -65/±10 arm cue mapped through the adapter and
@@ -385,12 +398,10 @@ public final class PenguinRenderContext {
         if(clipId!=null){
             float elapsed=DanceClient.elapsed(f.entity,f.partial);
             if(DanceLibrary.isBuiltin(clipId)){
-                int style=builtinStyle(clipId);
-                return style<0
-                        ?PenguinDancePose.evaluate(elapsed,shared,f.model,profile)
-                        :PenguinDancePose.evaluateStyle(style,elapsed,shared,f.model,profile);
+                // A builtin miss stays null; only uploaded clips fall through to the legacy path.
+                return selectedDancePose(clipId,elapsed,shared,f.model,profile);
             }
-            PenguinAnimationPose custom=playbackClip(f,clipId,elapsed,profile);
+            PenguinAnimationPose custom=selectedDancePose(clipId,elapsed,shared,f.model,profile);
             if(custom!=null)return custom;
         }
         // Legacy fallback for a Disc.Dance membership whose new Playback has not arrived yet.
@@ -401,19 +412,44 @@ public final class PenguinRenderContext {
     /** Preview uses exactly the same builtin/penguin-clip evaluators as authoritative playback. */
     private static PenguinAnimationPose previewPose(PreviewFrame preview,Frame f,
                                                      PenguinProportions.Profile profile){
-        String clipId=preview.clipId();
-        float age=preview.age();
-        if(DanceLibrary.isBuiltin(clipId)){
-            int style=builtinStyle(clipId);
-            return style<0
-                    ?PenguinDancePose.evaluate(age,shared,f.model,profile)
-                    :PenguinDancePose.evaluateStyle(style,age,shared,f.model,profile);
-        }
-        PenguinAnimationClip clip=preview.clip();
+        return selectedClipDancePose(preview.clipId(),preview.clip(),preview.age(),
+                shared,f.model,profile);
+    }
+    /**
+     * Single selected-clip sampler shared by ordinary/preview dances and boss sampling. Builtins
+     * use the same style mapping as ordinary dances; an uploaded clip is taken from the
+     * authoritative client cache, sampled by its authored loop and evaluated as TAUNT.
+     */
+    static PenguinAnimationPose selectedDancePose(String clipId,float elapsed,
+            PenguinBodyModel parts,EntityModel<?> model,PenguinProportions.Profile profile){
+        if(clipId==null)return null;
+        if(DanceLibrary.isBuiltin(clipId))
+            return builtinDancePose(clipId,elapsed,parts,model,profile);
+        return clipDancePose(clipId,DanceClient.cachedClip(clipId),elapsed,parts,model,profile);
+    }
+    /** Preview variant uses the clip carried by the detached preview scope, never the cache. */
+    static PenguinAnimationPose selectedClipDancePose(String clipId,PenguinAnimationClip clip,
+            float elapsed,PenguinBodyModel parts,EntityModel<?> model,
+            PenguinProportions.Profile profile){
+        if(DanceLibrary.isBuiltin(clipId))
+            return builtinDancePose(clipId,elapsed,parts,model,profile);
+        return clipDancePose(clipId,clip,elapsed,parts,model,profile);
+    }
+    private static PenguinAnimationPose builtinDancePose(String clipId,float elapsed,
+            PenguinBodyModel parts,EntityModel<?> model,PenguinProportions.Profile profile){
+        int style=builtinStyle(clipId);
+        return style<0
+                ?PenguinDancePose.evaluate(elapsed,parts,model,profile)
+                :PenguinDancePose.evaluateStyle(style,elapsed,parts,model,profile);
+    }
+    private static PenguinAnimationPose clipDancePose(String clipId,PenguinAnimationClip clip,
+            float elapsed,PenguinBodyModel parts,EntityModel<?> model,
+            PenguinProportions.Profile profile){
+        if(clipId==null||clipId.isEmpty()||DanceLibrary.isBuiltin(clipId))return null;
         if(clip==null)return null;
-        if(!Float.isFinite(age))return null;
-        PenguinAnimationClip.Sample sample=clip.sampleLoop(age);
-        return PenguinAnimationPose.evaluate(PenguinAction.TAUNT,clip,sample,shared,f.model,profile);
+        if(!Float.isFinite(elapsed))return null;
+        PenguinAnimationClip.Sample sample=clip.sampleLoop(elapsed);
+        return PenguinAnimationPose.evaluate(PenguinAction.TAUNT,clip,sample,parts,model,profile);
     }
     private static PenguinAnimationPose playbackPose(Frame f,Source source,PenguinProportions.Profile profile){
         if(!DanceClient.active(f.entity,source))return null;
@@ -422,12 +458,7 @@ public final class PenguinRenderContext {
     /** Uploaded clips reuse the fixed 16-joint path and loop on the authored source period. */
     private static PenguinAnimationPose playbackClip(Frame f,String clipId,float elapsed,
                                                       PenguinProportions.Profile profile){
-        if(clipId==null||clipId.isEmpty()||DanceLibrary.isBuiltin(clipId))return null;
-        PenguinAnimationClip clip=DanceClient.cachedClip(clipId);
-        if(clip==null)return null;
-        if(!Float.isFinite(elapsed))return null;
-        PenguinAnimationClip.Sample sample=clip.sampleLoop(elapsed);
-        return PenguinAnimationPose.evaluate(PenguinAction.TAUNT,clip,sample,shared,f.model,profile);
+        return clipDancePose(clipId,DanceClient.cachedClip(clipId),elapsed,shared,f.model,profile);
     }
     private static int builtinStyle(String clipId){
         if(DanceLibrary.BUILTIN_HIP.equals(clipId))return 0;

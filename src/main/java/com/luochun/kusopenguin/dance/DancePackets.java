@@ -247,6 +247,35 @@ public final class DancePackets {
         }
     }
 
+    /**
+     * Server-owned marker for one exact SiliconeDolls fake player. The client never supplies this
+     * identity; it only remembers tracked UUIDs per dimension so K can offer the existing wheel.
+     */
+    public record FakeTargetMarker(UUID entity, ResourceLocation dimension, boolean tracked)
+        implements CustomPacketPayload {
+        public static final Type<FakeTargetMarker> TYPE =
+            new Type<>(ResourceLocation.fromNamespaceAndPath("kuso_penguin", "dance_fake_target"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, FakeTargetMarker> STREAM_CODEC =
+            StreamCodec.of(
+                (buf, packet) -> {
+                    buf.writeUUID(packet.entity());
+                    buf.writeResourceLocation(packet.dimension());
+                    buf.writeBoolean(packet.tracked());
+                },
+                buf -> decode(() -> new FakeTargetMarker(buf.readUUID(),
+                    buf.readResourceLocation(), buf.readBoolean())));
+
+        public FakeTargetMarker {
+            Objects.requireNonNull(entity, "entity");
+            Objects.requireNonNull(dimension, "dimension");
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     /** Bounded client control request; PLAY/STOP are forwarded to the installed server handler. */
     public record Control(Action action, UUID ticket, UUID target, String clipId, Trigger trigger,
                           int slot) implements CustomPacketPayload {

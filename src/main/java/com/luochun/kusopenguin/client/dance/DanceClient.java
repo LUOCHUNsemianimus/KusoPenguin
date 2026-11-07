@@ -18,6 +18,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.EntityHitResult;
 import net.neoforged.api.distmarker.Dist;
@@ -37,6 +38,9 @@ public final class DanceClient implements DanceClientHooks.Listener {
     private static volatile DancePackets.Catalog catalog;
     private static final Map<UUID, DancePackets.Playback> PLAYBACK = new HashMap<>();
     private static final java.util.Set<String> REQUESTED = new java.util.HashSet<>();
+    /** Server-verified fake targets with the dimension carried by the marker, never client claims. */
+    private static final Map<UUID, ResourceLocation> FAKE_TARGETS = new HashMap<>();
+    private static ResourceLocation knownDimension;
 
     public DanceClient() {
     }
@@ -149,6 +153,18 @@ public final class DanceClient implements DanceClientHooks.Listener {
         return MC.player.getUUID();
     }
 
+    /**
+     * True only for a UUID the server explicitly marked in this exact client dimension. This is the
+     * sole client-side fake-player identity; it never derives fake status from a remote entity.
+     */
+    public static boolean isTrackedFakeTarget(UUID entity) {
+        if (entity == null || MC.level == null) {
+            return false;
+        }
+        ResourceLocation dimension = FAKE_TARGETS.get(entity);
+        return dimension != null && dimension.equals(MC.level.dimension().location());
+    }
+
     /** K fallback after film/corpse precedence: open the quick wheel on the current target. */
     public static void openWheel() {
         if (MC.player == null || MC.level == null
@@ -159,8 +175,20 @@ public final class DanceClient implements DanceClientHooks.Listener {
         if (target == null) {
             return;
         }
+        openWheel(target, null);
+    }
+
+    /**
+     * Opens the existing wheel for an already captured exact target. The optional display name is
+     * used for a boss target; {@code null} keeps the ordinary self/maid label logic.
+     */
+    public static void openWheel(UUID target, Component targetName) {
+        if (MC.player == null || MC.level == null || target == null
+            || !MC.player.hasEffect(ModEffects.PENGUIN)) {
+            return;
+        }
         refresh();
-        MC.setScreen(new DanceWheelScreen(target));
+        MC.setScreen(new DanceWheelScreen(target, targetName));
     }
 
     public static void playSlot(int slot, UUID target) {
@@ -248,6 +276,18 @@ public final class DanceClient implements DanceClientHooks.Listener {
         }
     }
 
+    @Override
+    public void onFakeTargetMarker(DancePackets.FakeTargetMarker packet) {
+        if (packet.tracked()) {
+            FAKE_TARGETS.put(packet.entity(), packet.dimension());
+            return;
+        }
+        // A late stop for an old dimension must not erase a marker for the dimension we may already
+        // be entering (start-tracking can arrive before the client level switches).
+        FAKE_TARGETS.computeIfPresent(packet.entity(), (entity, dimension) ->
+            dimension.equals(packet.dimension()) ? null : dimension);
+    }
+
     /** Next-step render hook: exact authoritative source match for one entity. */
     public static boolean active(LivingEntity entity, Source source) {
         DancePackets.Playback playback = playback(entity);
@@ -306,7 +346,19 @@ public final class DanceClient implements DanceClientHooks.Listener {
         if (MC.level == null) {
             PLAYBACK.clear();
             REQUESTED.clear();
+            FAKE_TARGETS.clear();
+            knownDimension = null;
             return;
+        }
+        ResourceLocation dimension = MC.level.dimension().location();
+        if (!dimension.equals(knownDimension)) {
+            ResourceLocation previous = knownDimension;
+            knownDimension = dimension;
+            // Drop markers that belonged to the dimension being left. A marker for the new
+            // dimension may already have arrived, so matching by the previous value keeps it.
+            if (previous != null) {
+                FAKE_TARGETS.entrySet().removeIf(entry -> previous.equals(entry.getValue()));
+            }
         }
         // Keep queued actors in playback state; request them as transfer slots become free.
         // A failed file is reported once per session rather than retried on every render frame.
@@ -333,6 +385,8 @@ public final class DanceClient implements DanceClientHooks.Listener {
     public static void clear() {
         PLAYBACK.clear();
         REQUESTED.clear();
+        FAKE_TARGETS.clear();
+        knownDimension = null;
         catalog = null;
         DanceTransfers.clear();
     }

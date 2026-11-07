@@ -2,9 +2,11 @@
 
 Editable sleeve source is ring geometry, not borrowed Cataclysm assets; body/feet reuse HIGH.
 Three-link closed flippers are baked into ADDITIONAL body triangles in a fixed belly-hug pose.
-They bind rigidly to body joint 1, so they follow the torso without touching the native arm
-bones or the separate short cuffs (joints 4/7). --check verifies byte reproducibility,
-predictable parts/faces and watertight, outward, non-degenerate cuff topology.
+Positive-X flipper faces (268..303) bind rigidly to Ignis channel 5 and negative-X faces (304..339)
+to channel 8, so idle geometry follows the torso while dance can rotate them at their belly-root
+pivots without touching the native arm bones or the separate short cuffs (channels 4/7). --check
+verifies byte reproducibility, predictable parts/faces and watertight, outward, non-degenerate
+cuff topology.
 """
 from pathlib import Path
 from collections import Counter
