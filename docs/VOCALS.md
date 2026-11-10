@@ -182,6 +182,11 @@ passages. The draw restores the model's
 own expression as soon as playback stops. This amplitude-based effect applies to both microphone
 and instrument vocals.
 
+Taisho Maid Wine Fox and variants using its Gecko rig use four expressions, including all parts
+of the nested smile. Nine-Tailed, Kung Fu, Astronaut and Elf use their own four shapes. Saint
+Wine Fox uses its chanting mouth with variable opening, and Mini Wine Fox uses two expressions.
+The separate Bedrock Taisho Wine Fox has no switchable mouth in the bundled model.
+
 ## 验证 / Validation
 
 - 完整构建通过；`test NO-SOURCE`，不宣称存在 JUnit 用例。
