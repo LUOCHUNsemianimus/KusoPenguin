@@ -1,6 +1,6 @@
 # 人声与麦克风 / Vocals and microphone
 
-2026-10-30。乐器弹唱、人声绑定和独立清唱麦克风已实现；本轮不包含口型。
+乐器弹唱、人声绑定和独立清唱麦克风共用同一套人声播放。支持嘴型骨骼的 Gecko 酒狐女仆会随人声改变嘴型，麦克风清唱另有音符和身体轻摆。
 
 ## 使用方法
 
@@ -165,7 +165,8 @@ a library clip, press Save binding, then Play/Pause. The microphone binding uses
 clock, so nearby MIDI ensemble changes do not move the vocal. Give a configured microphone to a maid
 to carry the clip; she autoplays from the server clock until explicitly paused. The item is a plain
 microphone when Immersive Melodies is absent, with an install message; the optional IM adapter is
-required for the clock/animation path. Mouth/lip motion is not implemented.
+required for the clock/animation path. During playback the singer sways gently and emits note
+particles, which are hidden for the local singer in first person.
 
 Only an actual OPEN reply creates a screen. Busy, save, remove, toggle, play and pause replies update
 the live screen or show a translated status; they never recreate a screen the user closed. Upload
@@ -174,7 +175,12 @@ page; microphone hash changes preserve the selected clip and inputs.
 
 Limits: one active microphone clip per item, audio up to 5 minutes / 32 MiB through the shared
 importer, gain `[0, 2]`, microphone offset fixed at 0, and one positional vocal voice per entity.
-Microphone audio is not synthesized from MIDI and does not add mouth animation.
+The same vocal stream drives mouth motion for Gecko Wine Fox maids with compatible mouth bones,
+including the retained head in penguin form. Mouth shapes follow the measured PCM amplitude
+relative to nearby active audio at the current playback position, with a resting mouth in quiet
+passages. The draw restores the model's
+own expression as soon as playback stops. This amplitude-based effect applies to both microphone
+and instrument vocals.
 
 ## 验证 / Validation
 

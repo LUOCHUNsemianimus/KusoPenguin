@@ -40,6 +40,8 @@ public final class VocalSound extends AbstractTickableSoundInstance {
     private final long midiEndMs;
     private final AtomicLong expectedAudioMs;
     private final ResourceKey<Level> dimension;
+    private final boolean measureMouth;
+    private volatile VocalPcmEnvelope envelope;
     private volatile long openedAtNanos = -1L;
     private volatile long openedAudioMs;
     private volatile long streamEndMs = Long.MAX_VALUE;
@@ -51,7 +53,7 @@ public final class VocalSound extends AbstractTickableSoundInstance {
     private volatile boolean openedDuringPause;
 
     public VocalSound(LivingEntity entity, Path cacheFile, String trackId, int offsetMs,
-                      long expectedAudioMs, long midiEndMs, float gain) {
+                      long expectedAudioMs, long midiEndMs, float gain, boolean measureMouth) {
         super(MusicItems.CUSTOM_MUSIC.get(), SoundSource.RECORDS,
             SoundInstance.createUnseededRandom());
         this.entity = Objects.requireNonNull(entity, "entity");
@@ -59,6 +61,7 @@ public final class VocalSound extends AbstractTickableSoundInstance {
         this.trackId = Objects.requireNonNull(trackId, "trackId");
         this.offsetMs = offsetMs;
         this.midiEndMs = midiEndMs;
+        this.measureMouth = measureMouth;
         this.expectedAudioMs = new AtomicLong(Math.max(0L, expectedAudioMs));
         this.dimension = entity.level().dimension();
         this.volume = Math.max(0.0F, Math.min(2.0F, gain));
@@ -148,8 +151,13 @@ public final class VocalSound extends AbstractTickableSoundInstance {
                 openedAudioMs = requested;
                 streamEndMs = requested + stream.remainingDurationMs();
                 openedDuringPause = paused || Minecraft.getInstance().isPaused();
+                AudioStream output = stream;
+                if (measureMouth) {
+                    envelope = new VocalPcmEnvelope(stream);
+                    output = envelope;
+                }
                 openedAtNanos = System.nanoTime();
-                return stream;
+                return output;
             } catch (IOException e) {
                 streamFailed = true;
                 streamError = Objects.toString(e.getMessage(), e.getClass().getSimpleName());
@@ -173,6 +181,12 @@ public final class VocalSound extends AbstractTickableSoundInstance {
 
     public boolean streamOpened() {
         return openedAtNanos >= 0L;
+    }
+
+    /** Relative amplitude at the actual stream position. Client thread only. */
+    int mouthLevel() {
+        VocalPcmEnvelope current = envelope;
+        return current == null ? 0 : current.mouthLevelAt(audioProgressMs() - openedAudioMs);
     }
 
     /** True when this instance ended at EOF or a native MIDI boundary, not because it was replaced. */

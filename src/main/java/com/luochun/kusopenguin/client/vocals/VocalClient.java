@@ -1,9 +1,11 @@
 package com.luochun.kusopenguin.client.vocals;
 
 import com.luochun.kusopenguin.KusoPenguin;
+import com.luochun.kusopenguin.client.compat.WineFoxMouth;
 import com.luochun.kusopenguin.client.music.DiscTransfers;
 import com.luochun.kusopenguin.vocals.VocalClientHooks;
 import com.luochun.kusopenguin.vocals.VocalData;
+import com.luochun.kusopenguin.vocals.VocalItems;
 import com.luochun.kusopenguin.vocals.VocalPackets;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -74,6 +76,37 @@ public final class VocalClient implements VocalClientHooks.Listener {
     /** Last one-shot playback problem, or an empty component. */
     public static Component status() {
         return status;
+    }
+
+    /** -1 leaves the native expression alone. Zero is the resting mouth within a vocal. */
+    public static int mouthLevel(LivingEntity entity) {
+        Voice voice = activeVoice(entity);
+        return voice == null ? -1 : voice.sound.mouthLevel();
+    }
+
+    static boolean performingWithMicrophone(LivingEntity entity) {
+        Voice voice = activeVoice(entity);
+        if (voice == null || !VocalData.MICROPHONE_MELODY.equals(voice.key.melodyId())) {
+            return false;
+        }
+        ItemStack main = entity.getMainHandItem();
+        ItemStack mic = VocalItems.isMicrophone(main) ? main : entity.getOffhandItem();
+        return VocalItems.playing(mic) && VocalItems.startTime(mic) == voice.key.startTime();
+    }
+
+    private static Voice activeVoice(LivingEntity entity) {
+        Voice voice = VOICES.get(entity.getUUID());
+        if (voice == null || voice.entity != entity || voice.spent || !entity.isAlive()
+            || MC.level != entity.level() || MC.isPaused() || !audible()) {
+            return null;
+        }
+        VocalSound sound = voice.sound;
+        if (sound == null || !sound.streamOpened() || sound.isStopped()
+            || !MC.getSoundManager().isActive(sound)) {
+            return null;
+        }
+        long position = sound.audioProgressMs();
+        return position < Math.min(sound.streamEndMs(), sound.midiEndMs()) ? voice : null;
     }
 
     /** Number of currently active/pending vocal slots, for diagnostics. */
@@ -180,6 +213,9 @@ public final class VocalClient implements VocalClientHooks.Listener {
             voice.offsetMs = binding.offsetMs();
             voice.gain = binding.gain();
             update(voice);
+            if (VocalData.MICROPHONE_MELODY.equals(key.melodyId())) {
+                MicrophonePerformance.emitNote(living);
+            }
         }
         Iterator<Map.Entry<UUID, Voice>> iterator = VOICES.entrySet().iterator();
         while (iterator.hasNext()) {
@@ -271,7 +307,8 @@ public final class VocalClient implements VocalClientHooks.Listener {
             return;
         }
         VocalSound sound = new VocalSound(voice.entity, voice.path, voice.key.trackId(),
-            voice.offsetMs, voice.expectedAudioMs, voice.midiEndMs, voice.gain);
+            voice.offsetMs, voice.expectedAudioMs, voice.midiEndMs, voice.gain,
+            WineFoxMouth.supports(voice.entity));
         voice.sound = sound;
         status = Component.empty();
         MC.getSoundManager().play(sound);

@@ -8,6 +8,7 @@ import com.github.tartaricacid.touhoulittlemaid.geckolib3.util.EModelRenderCycle
 import com.luochun.kusopenguin.client.PenguinRenderContext;
 import com.luochun.kusopenguin.client.PenguinRenderSupport;
 import com.luochun.kusopenguin.client.compat.MaidGeoCompatClient;
+import com.luochun.kusopenguin.client.compat.WineFoxMouth;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.model.EntityModel;
@@ -93,6 +94,17 @@ public abstract class MaidGeoRendererMixin {
                                             int packedOverlay, float red, float green, float blue,
                                             float alpha) {
         LivingEntity entity = (LivingEntity) animatable;
+        WineFoxMouth.render(entity, model, () -> kusoPenguin$drawGeoModel(renderer, model, entity,
+                partialTick, renderType, poseStack, bufferSource, buffer, packedLight, packedOverlay,
+                red, green, blue, alpha));
+    }
+
+    private void kusoPenguin$drawGeoModel(GeoReplacedEntityRenderer<LivingEntity, ?> renderer,
+                                         AnimatedGeoModel model, LivingEntity entity,
+                                         float partialTick, RenderType renderType, PoseStack poseStack,
+                                         MultiBufferSource bufferSource, VertexConsumer buffer,
+                                         int packedLight, int packedOverlay, float red, float green,
+                                         float blue, float alpha) {
         EntityModel<?> view = PenguinRenderContext.currentModel();
         if (view == null || !MaidGeoCompatClient.isReplacement(view, entity)) {
             renderer.render(model, entity, partialTick, renderType, poseStack, bufferSource,

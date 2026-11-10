@@ -17,6 +17,7 @@
     "ServerPlayerPenguinEffectSyncMixin"
   ],
   "client": [
+    "EntityRenderDispatcherMixin",
     "LivingEntityRendererMixin",
     "MaledictusLayerMixin",
     "ScyllaRendererMixin",
