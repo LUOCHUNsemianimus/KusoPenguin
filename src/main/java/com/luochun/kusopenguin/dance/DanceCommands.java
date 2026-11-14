@@ -1,6 +1,8 @@
 package com.luochun.kusopenguin.dance;
 
 import com.luochun.kusopenguin.KusoPenguin;
+import com.luochun.kusopenguin.music.DanceSettings;
+import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.tree.CommandNode;
 import net.minecraft.commands.CommandSourceStack;
@@ -33,10 +35,36 @@ public final class DanceCommands {
             });
         CommandNode<CommandSourceStack> root =
             event.getDispatcher().getRoot().getChild("kusopenguin");
+        LiteralArgumentBuilder<CommandSourceStack> maidMusic = Commands.literal("maidmusic")
+            .requires(source -> source.hasPermission(2))
+            .executes(context -> {
+                context.getSource().sendSuccess(
+                    () -> Component.translatable("commands.kuso_penguin.maidmusic.state",
+                        maidMusicState(DanceSettings.UNRESTRICTED_MAID_MUSIC_DANCE.get())), false);
+                return 1;
+            })
+            .then(Commands.argument("value", BoolArgumentType.bool())
+                .executes(context -> {
+                    boolean value = BoolArgumentType.getBool(context, "value");
+                    DanceSettings.UNRESTRICTED_MAID_MUSIC_DANCE.set(value);
+                    DanceSettings.SPEC.save();
+                    context.getSource().sendSuccess(
+                        () -> Component.translatable("commands.kuso_penguin.maidmusic.changed",
+                            maidMusicState(value)), false);
+                    return 1;
+                }));
         if (root != null) {
             root.addChild(dances.build());
+            root.addChild(maidMusic.build());
         } else {
-            event.getDispatcher().register(Commands.literal("kusopenguin").then(dances));
+            event.getDispatcher().register(
+                Commands.literal("kusopenguin").then(dances).then(maidMusic));
         }
+    }
+
+    private static Component maidMusicState(boolean unrestricted) {
+        return Component.translatable(unrestricted
+            ? "commands.kuso_penguin.maidmusic.on"
+            : "commands.kuso_penguin.maidmusic.off");
     }
 }

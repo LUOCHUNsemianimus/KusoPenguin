@@ -563,6 +563,7 @@ public final class DancePlaybackManager {
         LivingEntity performer = layer.performer;
         return performer != null && !performer.isRemoved() && performer.isAlive()
                 && performer.level() == actor.entity.level()
+                && MelodiesDanceCompat.eligibleMaidMusicDancer(actor.entity)
                 && MelodiesDanceCompat.playingUploadedMidi(performer)
                 && performer.distanceToSqr(actor.entity)
                     <= MAID_MUSIC_RANGE * MAID_MUSIC_RANGE;
@@ -592,7 +593,8 @@ public final class DancePlaybackManager {
             }
             for (LivingEntity dancer : maids) {
                 if (!dancer.hasEffect(ModEffects.PENGUIN)
-                        || MelodiesDanceCompat.playingInstrument(dancer)) {
+                        || MelodiesDanceCompat.playingInstrument(dancer)
+                        || !MelodiesDanceCompat.eligibleMaidMusicDancer(dancer)) {
                     continue;
                 }
                 Actor actor = state.actors.get(dancer.getUUID());

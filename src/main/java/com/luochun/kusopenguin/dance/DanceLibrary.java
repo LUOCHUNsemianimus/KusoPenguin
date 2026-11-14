@@ -59,8 +59,8 @@ public final class DanceLibrary {
     public static final long MAX_FILE_BYTES = 2L * 1024L * 1024L;
     public static final int MAX_FRAMES = 901;
     public static final float MAX_SECONDS = 30.0F;
-    public static final int MAX_CLIPS_PER_PLAYER = 5;
-    public static final long MAX_BYTES_PER_PLAYER = 10L * 1024L * 1024L;
+    public static final int MAX_CLIPS_PER_PLAYER = 32;
+    public static final long MAX_BYTES_PER_PLAYER = 64L * 1024L * 1024L;
     public static final long MAX_GLOBAL_BYTES = 128L * 1024L * 1024L;
     public static final int MAX_TITLE_CHARS = 128;
     public static final int MAX_CLIP_ID_CHARS = 64;
@@ -381,7 +381,7 @@ public final class DanceLibrary {
             throw new IOException("Owner already has " + MAX_CLIPS_PER_PLAYER + " dance clips");
         }
         if (canonical.bytes().length > MAX_BYTES_PER_PLAYER - ownedBytes(owner)) {
-            throw new IOException("Owner dance storage limit of 10 MiB would be exceeded");
+            throw new IOException("Owner dance storage limit of 64 MiB would be exceeded");
         }
         if (existingPhysical == null
             && canonical.bytes().length > MAX_GLOBAL_BYTES - storedBytes()) {

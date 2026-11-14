@@ -10,6 +10,7 @@ import com.luochun.kusopenguin.client.PenguinRenderContext;
 import com.luochun.kusopenguin.client.PenguinRenderSupport;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Axis;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -20,12 +21,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartPose;
+import net.minecraft.client.renderer.ItemInHandRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.LivingEntity;
-import net.neoforged.fml.ModList;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemDisplayContext;
+import net.minecraft.world.item.ItemStack;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
@@ -45,9 +51,12 @@ import org.slf4j.LoggerFactory;
  * pose (full model, then AllHead hidden) into {@link CaptureConsumer}. The body vertex multiset is
  * subtracted from the full multiset, leaving the exact head/hair quads. Only complete 4-vertex
  * quads are considered; native draw order and duplicate quads survive the subtraction.
+ *
+ * <p>The same capture/body path serves actual players through the pinned player-renderer high-level
+ * method and its base layer loop. Player layers are not vanilla {@code RenderLayer}s, so every
+ * active player layer callback is scoped, copied and replayed once after the native mesh finished.
  */
 public final class YsmCompatClient {
-    private static final String MAID_MOD_ID = "touhou_little_maid";
     private static final String UTIL_CLASS = "com.elfmcys.yesstevemodel.OoooOoo0o0000O0o00o0O0Oo";
     private static final Logger LOGGER = LoggerFactory.getLogger("KusoPenguin/YsmCompat");
 
@@ -58,22 +67,27 @@ public final class YsmCompatClient {
     private YsmCompatClient() {
     }
 
-    /** True only when both the maid mod and the pinned YSM classes are present. */
+    /** True when the pinned YSM classes are present. TLM is not required for the player path. */
     public static boolean isAvailable() {
         Boolean cached = available;
         if (cached == null) {
-            cached = ModList.get().isLoaded(MAID_MOD_ID) && present(UTIL_CLASS);
+            cached = present(UTIL_CLASS);
             available = cached;
         }
         return cached;
     }
 
     /**
-     * Model-type hint for the actual nested YSM render proxy. It only classifies the current
+     * Model-type hint for the actual nested YSM maid render proxy. It only classifies the current
      * EntityModel; it never reads or mutates YSM bones, capture state or native frame math.
      */
+    public static boolean isMaidView(Object model) {
+        return isAvailable() && model instanceof Impl.YsmView view && view.isMaid();
+    }
+
+    /** Historical maid-only alias. A player {@link Impl.YsmView} is deliberately not a view here. */
     public static boolean isView(Object model) {
-        return isAvailable() && model instanceof Impl.YsmView;
+        return isMaidView(model);
     }
 
     private static boolean present(String name) {
@@ -98,6 +112,38 @@ public final class YsmCompatClient {
                     partialTick);
         }
         PUSHED.get().push(pushed);
+    }
+
+    /**
+     * Opens the frame around the pinned YSM player-renderer high-level method. The actual entity is
+     * read from the wrapper's inherited public accessor and must be an actual {@link Player}; every
+     * rejected draw keeps the complete native render. The marker is always pushed so the matching
+     * {@link #exit(boolean)} is balanced even when this is not a player replacement.
+     */
+    public static void enterPlayer(Object wrapper, PoseStack poseStack,
+                                   MultiBufferSource bufferSource, int packedLight,
+                                   float partialTick) {
+        boolean pushed = false;
+        if (isAvailable()) {
+            pushed = Impl.enterPlayer(wrapper, poseStack, bufferSource, packedLight, partialTick);
+        }
+        PUSHED.get().push(pushed);
+    }
+
+    /**
+     * Scopes an active player layer callback. Every call is queued with an independent copy of the
+     * current pose and normal; the single replay happens after the native player mesh finished, so
+     * no item/elytra texture switch can flush a buffer that native mesh writing still owns.
+     * Returns false for maid/no frame so the mixin's {@code original.call} keeps full ownership.
+     */
+    public static boolean playerLayer(Object layer, PoseStack poseStack,
+                                      MultiBufferSource bufferSource, int packedLight,
+                                      Object model, float limbSwing, float limbSwingAmount,
+                                      float partialTick, float ageInTicks, float netHeadYaw,
+                                      float headPitch) {
+        return isAvailable() && Impl.playerLayer(layer, poseStack, bufferSource, packedLight,
+                model, limbSwing, limbSwingAmount, partialTick, ageInTicks, netHeadYaw,
+                headPitch);
     }
 
     /** Closes the frame and, for a fully validated draw, defers the shared body to this point. */
@@ -128,7 +174,14 @@ public final class YsmCompatClient {
         private static final String META_CLASS = "com.elfmcys.yesstevemodel.O0OOo0OoOoo0o0o0oO000o00";
         private static final String DRAW = "oOo0OO0O0o000OO0O000oo0o";
         private static final String WRAPPER_MODEL = "O00OOOo00Oo0OO0000oOo0oo";
+        private static final String ENTITY_ACCESSOR = "ooo00OoO00OOOO0oOooOo0Oo";
         private static final String GEO_ENTITY = "getGeoEntity";
+        private static final String LAYER_OWNER = "com.elfmcys.yesstevemodel.O000o00OooO00oO0oo0o0o0o";
+        private static final String LAYER_MODEL = "com.elfmcys.yesstevemodel.OoO0oo0o0o0oOoo0oOOO0Ooo";
+        private static final String HELD_LAYER = "com.elfmcys.yesstevemodel.o000oOO0000oOOOOo0O0oooO";
+        private static final String ELYTRA_LAYER = "com.elfmcys.yesstevemodel.oO0OO0o0oo00OOOoOoOO00Oo";
+        private static final String PARROT_LAYER = "com.elfmcys.yesstevemodel.ooOoOoo00o0O0OO0oO0O0ooo";
+        private static final String FISHING_LAYER = "com.elfmcys.yesstevemodel.oOO0Oo000ooooO0Oo00Oo000";
         private static final String META = "OOo0o0000Ooo0o00OO0oOOoO";
         private static final String BONES = "oOo0OO0O0o000OO0O000oo0o";
         private static final String AUX = "oOoo00O0o0oO0o0oO00OO0O0";
@@ -154,16 +207,24 @@ public final class YsmCompatClient {
         private static final boolean SUPPORTED;
         private static final Method DRAW_METHOD;
         private static final Class<?> META_TYPE;
+        private static final Class<?> LAYER_OWNER_CLASS = load(LAYER_OWNER);
+        private static final Class<?> LAYER_MODEL_CLASS = load(LAYER_MODEL);
+        private static final Class<?> HELD_LAYER_TYPE = load(HELD_LAYER);
+        private static final Class<?> ELYTRA_LAYER_TYPE = load(ELYTRA_LAYER);
+        private static final Class<?> PARROT_LAYER_TYPE = load(PARROT_LAYER);
+        private static final Class<?> FISHING_LAYER_TYPE = load(FISHING_LAYER);
         private static final ThreadLocal<Boolean> IN_CAPTURE = ThreadLocal.withInitial(() -> false);
         private static final ThreadLocal<ArrayDeque<Frame>> FRAMES =
                 ThreadLocal.withInitial(ArrayDeque::new);
         private static final Map<String, Method> METHODS = new ConcurrentHashMap<>();
+        private static final Map<Class<?>, Method> ENTITY_ACCESSORS = new ConcurrentHashMap<>();
         private static final Map<Class<?>, BoneRef> BONE_REFS = new ConcurrentHashMap<>();
         private static final Map<Class<?>, Method> MAP_GETS = new ConcurrentHashMap<>();
         private static final Map<Class<?>, Method> GEO_GETS = new ConcurrentHashMap<>();
         private static final Map<Class<?>, Method> WRAPPER_MODELS = new ConcurrentHashMap<>();
         private static final Map<Class<?>, Field> YSM_FIELDS = new ConcurrentHashMap<>();
         private static final Set<String> LOGGED = ConcurrentHashMap.newKeySet();
+        private static final Method LAYER_CALLBACK = layerCallback();
 
         static {
             boolean supported = false;
@@ -209,23 +270,84 @@ public final class YsmCompatClient {
                 if (wrapper == null) {
                     return false;
                 }
-                Object model = resolveModel(wrapper);
-                if (model == null) {
-                    // The native renderer has not initialised this maid's YSM model yet. Keep the
-                    // complete native draw instead of advancing the animation ourselves.
-                    return false;
-                }
-                Frame frame = new Frame(entity, wrapper, model, poseStack, bufferSource, packedLight);
-                if (!bind(frame)) {
-                    return false;
-                }
-                FRAMES.get().push(frame);
-                PenguinRenderContext.push(entity, frame.view, partialTick);
-                return true;
+                return startFrame(wrapper, entity, poseStack, bufferSource, packedLight, partialTick,
+                        true);
             } catch (RuntimeException t) {
                 logOnce("enter", "YSM frame enter failed: " + t);
                 return false;
             }
+        }
+
+        static boolean enterPlayer(Object wrapper, PoseStack poseStack,
+                                   MultiBufferSource bufferSource, int packedLight,
+                                   float partialTick) {
+            if (!SUPPORTED || wrapper == null) {
+                return false;
+            }
+            try {
+                Method accessor = ENTITY_ACCESSORS.computeIfAbsent(wrapper.getClass(), c -> {
+                    try {
+                        return find(c, ENTITY_ACCESSOR);
+                    } catch (ReflectiveOperationException e) {
+                        throw new IllegalStateException(e);
+                    }
+                });
+                if (!(invoke(wrapper, accessor) instanceof Player player)) {
+                    return false;
+                }
+                if (!PenguinRenderSupport.shouldReplace(player)
+                        || PenguinDeathClient.rendering(player)) {
+                    return false;
+                }
+                return startFrame(wrapper, player, poseStack, bufferSource, packedLight,
+                        partialTick, false);
+            } catch (RuntimeException t) {
+                logOnce("enter-player", "YSM player frame enter failed: " + t);
+                return false;
+            }
+        }
+
+        private static boolean startFrame(Object wrapper, LivingEntity entity, PoseStack poseStack,
+                                          MultiBufferSource bufferSource, int packedLight,
+                                          float partialTick, boolean maid) {
+            Object model = resolveModel(wrapper);
+            if (model == null) {
+                // The native renderer has not initialised this entity's YSM model yet. Keep the
+                // complete native draw instead of advancing the animation ourselves.
+                return false;
+            }
+            Frame frame = new Frame(entity, wrapper, model, poseStack, bufferSource, packedLight,
+                    maid);
+            if (!bind(frame)) {
+                return false;
+            }
+            FRAMES.get().push(frame);
+            PenguinRenderContext.push(entity, frame.view, partialTick);
+            return true;
+        }
+
+        /**
+         * Queues one player layer callback with a private copy of the current pose/normal. The
+         * original layer is only invoked later, from {@link #replayPlayerLayers}, after the native
+         * player mesh returned. A maid frame or no frame returns false so the mixin keeps the
+         * untouched native call.
+         */
+        static boolean playerLayer(Object layer, PoseStack poseStack,
+                                   MultiBufferSource bufferSource, int packedLight, Object model,
+                                   float limbSwing, float limbSwingAmount, float partialTick,
+                                   float ageInTicks, float netHeadYaw, float headPitch) {
+            if (LAYER_CALLBACK == null || layer == null || model == null) {
+                return false;
+            }
+            Frame frame = FRAMES.get().peek();
+            if (frame == null || frame.maid) {
+                return false;
+            }
+            frame.layers.add(new LayerCall(layer, model, bufferSource, packedLight, limbSwing,
+                    limbSwingAmount, partialTick, ageInTicks, netHeadYaw, headPitch,
+                    new Matrix4f(poseStack.last().pose()),
+                    new Matrix3f(poseStack.last().normal())));
+            return true;
         }
 
         static void exit(boolean normalReturn) {
@@ -235,12 +357,18 @@ public final class YsmCompatClient {
                 return;
             }
             try {
-                if (normalReturn && !frame.aborted && frame.captured && frame.bodyPose != null) {
-                    drawDeferredBody(frame);
+                if (normalReturn) {
+                    if (frame.captured && !frame.aborted && frame.bodyPose != null) {
+                        drawDeferredBody(frame);
+                    }
+                    if (!frame.maid) {
+                        replayPlayerLayers(frame);
+                    }
                 }
             } finally {
-                // The wrapper context is popped exactly once, on success and on every failure path.
-                // A failed body draw surfaces instead of leaving a head-only picture behind.
+                // Every queued callback is dropped exactly once. An abnormal native exit or a
+                // failed replay never repeats a layer, and the wrapper context is always popped.
+                frame.layers.clear();
                 PenguinRenderContext.pop();
                 if (frames.isEmpty()) {
                     FRAMES.remove();
@@ -270,6 +398,144 @@ public final class YsmCompatClient {
             } finally {
                 fresh.popPose();
             }
+        }
+
+        // ---------------------------------------------------------------- player layer replay
+
+        /**
+         * Replays every captured player layer exactly once, in its original order, under the still
+         * active penguin frame. Each callback gets a fresh PoseStack seeded with its own copied
+         * pose/normal, so deferred invocation cannot observe the native method's popped stack.
+         */
+        private static void replayPlayerLayers(Frame frame) {
+            for (LayerCall call : frame.layers) {
+                PoseStack replay = new PoseStack();
+                replay.last().pose().set(call.pose);
+                replay.last().normal().set(call.normal);
+                replay.pushPose();
+                try {
+                    renderPlayerLayer(frame, call, replay);
+                } finally {
+                    replay.popPose();
+                }
+            }
+        }
+
+        private static void renderPlayerLayer(Frame frame, LayerCall call, PoseStack poseStack) {
+            if (!frame.captured || frame.aborted) {
+                // The native body/head stayed complete: every layer renders exactly as authored.
+                invokeLayer(call, poseStack);
+                return;
+            }
+            if (instance(call.layer, HELD_LAYER_TYPE)) {
+                if (!drawPlayerHeld(frame, poseStack, call.bufferSource, call.packedLight)) {
+                    invokeLayer(call, poseStack);
+                }
+                return;
+            }
+            if (instance(call.layer, PARROT_LAYER_TYPE)) {
+                // Vanilla penguins do not show shoulder parrots outside their own gliding state.
+                return;
+            }
+            if (instance(call.layer, ELYTRA_LAYER_TYPE)) {
+                if (frame.entity.isFallFlying()) {
+                    poseStack.pushPose();
+                    try {
+                        if (PenguinRenderContext.mountElytraOnBack(poseStack)) {
+                            invokeLayer(call, poseStack);
+                        }
+                    } finally {
+                        poseStack.popPose();
+                    }
+                }
+                return;
+            }
+            if (instance(call.layer, FISHING_LAYER_TYPE)) {
+                // The native fishing tether keeps its own line geometry and owner/rod anchors.
+                invokeLayer(call, poseStack);
+                return;
+            }
+            // Armour/head cosmetics and unknown addon layers keep native behavior.
+            invokeLayer(call, poseStack);
+        }
+
+        private static void invokeLayer(LayerCall call, PoseStack poseStack) {
+            invoke(call.layer, LAYER_CALLBACK, poseStack, call.bufferSource, call.packedLight,
+                    call.model, call.limbSwing, call.limbSwingAmount, call.partialTick,
+                    call.ageInTicks, call.netHeadYaw, call.headPitch);
+        }
+
+        /**
+         * Draws the actual main/off-hand items on the shared wing end for a replaced player. The
+         * native player layer's item context/left-hand tail is reproduced, but no TLM gun helper is
+         * referenced. False means no item was drawn, so the caller replays the native layer.
+         */
+        private static boolean drawPlayerHeld(Frame frame, PoseStack poseStack,
+                                              MultiBufferSource bufferSource, int packedLight) {
+            if (!(frame.entity instanceof Player player)) {
+                return false;
+            }
+            ItemStack main = player.getMainHandItem();
+            ItemStack off = player.getOffhandItem();
+            if (main.isEmpty() && off.isEmpty()) {
+                return true;
+            }
+            ItemInHandRenderer renderer;
+            try {
+                renderer = Minecraft.getInstance().getEntityRenderDispatcher()
+                        .getItemInHandRenderer();
+            } catch (RuntimeException t) {
+                return false;
+            }
+            if (renderer == null) {
+                return false;
+            }
+            HumanoidArm mainArm = player.getMainArm();
+            boolean any = false;
+            poseStack.pushPose();
+            try {
+                // Native Y-up -> shared canonical penguin frame, exactly like the deferred body.
+                poseStack.scale(-1.0F, -1.0F, 1.0F);
+                poseStack.translate(0.0F, -1.5F, 0.0F);
+                if (!main.isEmpty()) {
+                    any |= renderHeld(player, main, mainArm, renderer, poseStack, bufferSource,
+                            packedLight);
+                }
+                if (!off.isEmpty()) {
+                    any |= renderHeld(player, off, mainArm.getOpposite(), renderer, poseStack,
+                            bufferSource, packedLight);
+                }
+            } finally {
+                poseStack.popPose();
+            }
+            return any;
+        }
+
+        private static boolean renderHeld(Player player, ItemStack stack, HumanoidArm arm,
+                                          ItemInHandRenderer renderer, PoseStack poseStack,
+                                          MultiBufferSource bufferSource, int packedLight) {
+            poseStack.pushPose();
+            try {
+                if (!PenguinRenderContext.applyHand(poseStack, arm)) {
+                    return false;
+                }
+                boolean left = arm == HumanoidArm.LEFT;
+                poseStack.mulPose(Axis.XP.rotationDegrees(-90.0F));
+                poseStack.mulPose(Axis.YP.rotationDegrees(180.0F));
+                poseStack.translate((left ? -1.0F : 1.0F) / 16.0F, 0.125F, -0.625F);
+                ItemDisplayContext context = left
+                        ? ItemDisplayContext.THIRD_PERSON_LEFT_HAND
+                        : ItemDisplayContext.THIRD_PERSON_RIGHT_HAND;
+                renderer.renderItem(player, stack, context, left, poseStack, bufferSource,
+                        packedLight);
+                return true;
+            } finally {
+                poseStack.popPose();
+            }
+        }
+
+        private static boolean instance(Object value, Class<?> type) {
+            return type != null && type.isInstance(value);
         }
 
         // ---------------------------------------------------------------- native mesh capture
@@ -721,6 +987,31 @@ public final class YsmCompatClient {
             return method;
         }
 
+        /** Resolves the base player layer callback once; null keeps every native layer untouched. */
+        private static Method layerCallback() {
+            if (LAYER_OWNER_CLASS == null || LAYER_MODEL_CLASS == null) {
+                return null;
+            }
+            try {
+                Method method = find(LAYER_OWNER_CLASS, DRAW, PoseStack.class,
+                        MultiBufferSource.class, int.class, LAYER_MODEL_CLASS, float.class,
+                        float.class, float.class, float.class, float.class, float.class);
+                method.setAccessible(true);
+                return method;
+            } catch (ReflectiveOperationException | RuntimeException t) {
+                logOnce("layer-callback", "YSM player layer bridge unavailable: " + t);
+                return null;
+            }
+        }
+
+        private static Class<?> load(String name) {
+            try {
+                return Class.forName(name, false, YsmCompatClient.class.getClassLoader());
+            } catch (ClassNotFoundException | LinkageError t) {
+                return null;
+            }
+        }
+
         private static Method find(Class<?> owner, String name, Class<?>... params)
                 throws ReflectiveOperationException {
             for (Class<?> type = owner; type != null; type = type.getSuperclass()) {
@@ -835,7 +1126,9 @@ public final class YsmCompatClient {
             final PoseStack poseStack;
             final MultiBufferSource bufferSource;
             final int packedLight;
+            final boolean maid;
             final YsmView ysmView;
+            final List<LayerCall> layers = new ArrayList<>();
 
             Object model;
             Object metadata;
@@ -854,13 +1147,14 @@ public final class YsmCompatClient {
             Map<String, Object> bonesByName;
 
             Frame(LivingEntity entity, Object wrapper, Object model, PoseStack poseStack,
-                  MultiBufferSource bufferSource, int packedLight) {
+                  MultiBufferSource bufferSource, int packedLight, boolean maid) {
                 this.entity = entity;
                 this.wrapper = wrapper;
                 this.model = model;
                 this.poseStack = poseStack;
                 this.bufferSource = bufferSource;
                 this.packedLight = packedLight;
+                this.maid = maid;
                 this.ysmView = new YsmView(this);
                 this.view = this.ysmView;
             }
@@ -897,6 +1191,13 @@ public final class YsmCompatClient {
             }
         }
 
+        /** One captured native player layer, with every argument and a private pose snapshot. */
+        private record LayerCall(Object layer, Object model, MultiBufferSource bufferSource,
+                                 int packedLight, float limbSwing, float limbSwingAmount,
+                                 float partialTick, float ageInTicks, float netHeadYaw,
+                                 float headPitch, Matrix4f pose, Matrix3f normal) {
+        }
+
         /**
          * Lightweight EntityModel proxy so every existing profile/pose/head helper keeps working.
          * Ready stays false until the native quad proof succeeded for the current draw.
@@ -906,6 +1207,10 @@ public final class YsmCompatClient {
 
             YsmView(Frame frame) {
                 this.frame = frame;
+            }
+
+            boolean isMaid() {
+                return frame.maid;
             }
 
             @Override

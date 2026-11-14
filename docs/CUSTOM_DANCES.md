@@ -7,10 +7,10 @@
 - 输入 `/kusopenguin dances` 打开管理页，将规范企鹅动画 JSON 或受支持的 Mixamo DAE 拖入窗口，也可填写本地路径后点“导入”。先预览，再点“上传”，等待服务器保存回执。
 - 选择动作后，可分别绑定“唱片机音乐”“复活”“女仆音乐”“动物唱片机”，也可指定轮盘槽位。K 优先处理原有尸体／胶片复活；其他情况打开自己或所指女仆的轮盘。只有主人能控制女仆，服务端核对 4 格范围和视线。
 - 八个轮盘槽默认前四槽为 `builtin:hip`/`builtin:pole`/`builtin:wave`/`builtin:cycle`，后四槽为空；Minecraft 键位设置内的 8 个舞蹈槽位快捷键默认未绑定。重复选择当前手动动作可停止；轮盘中间也可停止主动舞蹈。音乐自动触发仍由音乐是否播放决定。
-- 有企鹅效果且未演奏的女仆，在另一女仆 12 格范围内听到上传的 MIDI 时按主人所选动作跳舞；演奏者不被打断，音乐停止／离开范围／效果结束后释放舞蹈 AI 暂停。
+- 有企鹅效果且未演奏的女仆，在另一女仆 12 格范围内听到上传的 MIDI 时按主人所选动作跳舞；演奏者不被打断，音乐停止／离开范围／效果结束后释放舞蹈 AI 暂停。默认只限**当前任务为待命（idle）且原生作息为休息（IDLE）**的女仆；切换任务、作息离开休息或关闭全局开关会立即移除女仆音乐来源。
 - DAE 首版仅支持 **30 FPS、Y_UP、明确静止骨架、同步 LINEAR matrix 通道的 Mixamo 子集**；不支持任意 DAE、FBX、非矩阵 TRS 通道或未知骨骼。源文件不超过 8 MiB；规范动作不超过 2 MiB、901 帧、30 秒（含淡入淡出）。动作只改变视觉，不授予位移、伤害或复活权限；原有 5 秒／8 秒复活计时不变。
 
-Use `/kusopenguin dances` to import supported Mixamo DAE or canonical penguin JSON, preview the actual penguin, then explicitly upload. Assign independent jukebox, revival, maid-music and animal-jukebox triggers or one of eight wheel slots. K retains film/corpse revival precedence; otherwise it opens the self/target-maid wheel. Eight vanilla key bindings start unassigned. Only the owner can command a maid, with server-side range and sight checks. Idle penguin maids dance within 12 blocks of another maid playing uploaded MIDI; performers keep playing and AI resumes when the source ends. The DAE subset requires 30 FPS, Y_UP, known rest bones and synchronous LINEAR matrix tracks. FBX and arbitrary skeletons are unsupported. Clips are visual only; gameplay and revival timing remain authoritative.
+Use `/kusopenguin dances` to import supported Mixamo DAE or canonical penguin JSON, preview the actual penguin, then explicitly upload. Assign independent jukebox, revival, maid-music and animal-jukebox triggers or one of eight wheel slots. K retains film/corpse revival precedence; otherwise it opens the self/target-maid wheel. Eight vanilla key bindings start unassigned. Two further unbound client keys open the disc library and this dance manager through the existing `/kusopenguin disc` and `/kusopenguin dances` commands; they are not gated on the penguin effect. Only the owner can command a maid, with server-side range and sight checks. Idle penguin maids dance within 12 blocks of another maid playing uploaded MIDI; performers keep playing and AI resumes when the source ends. By default only a maid whose current task is idle and whose native schedule detail is IDLE qualifies; changing the task, leaving the IDLE schedule or turning the global switch off removes only the maid-music source immediately. The DAE subset requires 30 FPS, Y_UP, known rest bones and synchronous LINEAR matrix tracks. FBX and arbitrary skeletons are unsupported. Clips are visual only; gameplay and revival timing remain authoritative.
 
 ## 1. 范围与复用
 
@@ -26,8 +26,8 @@ Use `/kusopenguin dances` to import supported Mixamo DAE or canonical penguin JS
 | `DanceLibrary.MAX_FILE_BYTES` | 2 MiB（原始与规范化后均检查） |
 | `DanceLibrary.MAX_FRAMES` | 901 |
 | `DanceLibrary.MAX_SECONDS` | 30.0（含 blend） |
-| `DanceLibrary.MAX_CLIPS_PER_PLAYER` | 5 |
-| `DanceLibrary.MAX_BYTES_PER_PLAYER` | 10 MiB |
+| `DanceLibrary.MAX_CLIPS_PER_PLAYER` | 32 |
+| `DanceLibrary.MAX_BYTES_PER_PLAYER` | 64 MiB |
 | `DanceLibrary.MAX_GLOBAL_BYTES` | 128 MiB |
 | `DanceLibrary.MAX_JSON_DEPTH` / `MAX_JSON_TOKENS` | 32 / 500000 |
 | `DancePackets.MAX_CHUNK` | 16384 bytes |
@@ -50,7 +50,7 @@ Use `/kusopenguin dances` to import supported Mixamo DAE or canonical penguin JS
 5. 对规范化后的完整 JSON 字节计算小写 SHA-256，作为 clip id/文件名；写入 `clips/<sha256>.json`，索引 `index.json`。
 6. `expectedHash` 非空时必须等于上述规范化后的哈希，否则在落盘前失败。
 7. 同一玩家重复内容直接返回其既有 registration。**其他玩家已有相同 hash 时只新增该玩家的 registration，不重写物理文件，也不重复计入全库字节**；标题和每玩家配额仍按各自 registration 计算。
-8. 配额在落盘前检查：每玩家 5 个/10 MiB，全库 128 MiB（物理 hash 只计一次）。落盘先写临时文件，再原子移动到最终名；索引同样临时文件+原子移动。索引失败会删除本次新写的 clip 文件。
+8. 配额在落盘前检查：每玩家 32 个/64 MiB，全库 128 MiB（物理 hash 只计一次）；4 个内置舞蹈不占上传配额，8 个快捷槽位只保存引用、也不额外占用上传字节。落盘先写临时文件，再原子移动到最终名；索引同样临时文件+原子移动。索引失败会删除本次新写的 clip 文件。
 
 导入失败抛出带原因的 `IOException`；不会默认成功。
 
@@ -121,11 +121,13 @@ DanceServer.preferences(ServerPlayer);
 
 唱片机参与者的频道归属：玩家使用 `MUSIC`，精确类型 `touhou_little_maid:maid` 使用 `MUSIC`/`MAID_MUSIC`；其他动物参与者使用**上传该唱片者**的 `ANIMAL_MUSIC`，不再取最近玩家的设置。
 
+女仆音乐获取与每 tick 复核共用 `MelodiesDanceCompat.eligibleMaidMusicDancer`：外层先确认精确类型与 TLM 存在，再读取全局开关；默认 `false` 还要求当前任务 UID 为 `touhou_little_maid:idle` 且 `getScheduleDetail()==Activity.IDLE`（原生日程按当前昼/夜/全天计算，不硬编码时刻），任务为空时失败关闭。`true` 跳过任务与作息这两项，保留其余全部门禁。`/kusopenguin maidmusic [true|false]`（权限 2）查看/切换并保存到游戏/服务端工作目录下的 `config/kuso_penguin-server.toml` 的 `[dance] unrestrictedMaidMusicDance`；切换开关、任务或作息离开休息会立即移除 `MAID_MUSIC` 来源，无其他来源时释放舞蹈 AI，玩家手动、复活与唱片机规则不变。
+
 选择只接受 builtin 或该玩家本人 registration 的 hash；删除该玩家 registration 后仅该玩家的引用自动恢复默认/空槽并写回，其他 owner 的同 hash registration 不受影响。设置类操作（SET_PREF/SET_SLOT）要求玩家拥有企鹅效果；成功的 SET_PREF/SET_SLOT 在回复后立即发送 `Catalog(open=false)`。
 
-## 5. 网络协议（`DanceNetwork`，registrar `"2"`）
+## 5. 网络协议（`DanceNetwork`，registrar `"3"`）
 
-网络注册版本为 **2**：客户端与服务端必须使用同一版本，旧客户端会被明确拒绝，避免偏好/播放数据错位。
+网络注册版本为 **3**：客户端与服务端必须使用同一版本，旧客户端会被明确拒绝，避免旧目录上限/偏好/播放数据错位。`DancePackets.MAX_CATALOG_CLIPS` 直接引用 `DanceLibrary.MAX_CLIPS_PER_PLAYER`，没有第二份副本。
 
 独立包 ID：`kuso_penguin:dance_request`、`dance_chunk`、`dance_reply`、`dance_catalog`、`dance_playback`、`dance_control`。
 
@@ -134,7 +136,7 @@ DanceServer.preferences(ServerPlayer);
 - `Chunk(ticket, offset, byte[])`：单块 ≤16 KiB，offset 非负。
 - `Reply(action, ticket, success, message, clipId, totalBytes)`。
 - 导入失败仍回复通用的 `message.kuso_penguin.dance.import_failed`，并额外向该客户端发送一条带界错误的系统消息：`Component.translatableWithFallback("message.kuso_penguin.dance.import_failed.detail", ..., detail)`，`detail` 截断到 256 字符且替换控制字符；完整异常仍写入服务端日志。**包结构未改变**，不需要新版协议字段。
-- `Catalog(open, prefs, builtins, clips)`：**只含本人最多 5 个 clip**、4 个 builtin 元数据和 8 槽偏好（含 `animalMusic`），不返回全服目录。
+- `Catalog(open, prefs, builtins, clips)`：**只含本人最多 32 个 clip**、4 个 builtin 元数据和 8 槽偏好（含 `animalMusic`），不返回全服目录。
 - `Playback(dimension, entity, session, clipId, startTick, source, playing)`。单一优先级来源是 `Source.priority()`：`REVIVAL(-1) > MANUAL(0) > MAID_MUSIC(1) > MUSIC(2)`；枚举声明顺序（wire order）保持 `MANUAL, MAID_MUSIC, MUSIC, REVIVAL` 不变。`DancePlaybackManager.DISPLAY_ORDER` 直接按该 priority 排序，不再另写复活特例。`session` 唯一，旧 STOP 不能停止新会话。
 - `Control(action, ticket, target, clipId, trigger, slot)`：`slot ∈ [-1,7]`；`SET_PREF` 必须带 trigger；`PLAY` 必须带 clipId。
 
@@ -155,6 +157,7 @@ DanceServer.preferences(ServerPlayer);
 - catalog/reply/chunk/playback 全部在主线程分发；下载在 2 个 IO worker 中做 SHA-256 与 `DanceLibrary.canonicalize` 复核，渲染帧只读取已解析的不可变 `PenguinAnimationClip`。
 - 内存缓存 LRU 上限 8 条/32 MiB；下载按 hash 去重，最多 4 条 pending，严格校验 ticket/offset/总长度，断线 generation 使旧回调失效并清理缓冲。
 - 上传只在 UI 明确选择后开始：worker 先 `DanceImport.convert`，再按服务器 credit 发 BEGIN/chunks/END，上传的正是 `Canonical.bytes()`，使用 `Canonical.hash()` 作为 `expectedHash`。
+- 管理界面把 4 个内置动作列在最前，随后是本人上传片段，因此总项数最多 36。每页行数按窗口高度计算，底部翻页按钮可访问全部项；当前选择、预览数据与输入字段在翻页后保留，页索引在目录变化时会夹紧到有效范围。
 - `DanceScreen` 由 `Catalog(open=true)` 或轮盘 Manage 打开；支持路径输入/拖放、异步导入状态、导入格式/时长/帧数/root-motion 报告、标题、上传、重命名/删除本人片段、4 个 trigger（音乐/复活/女仆音乐/动物唱片机）与 8 个 wheel slot 分配、恢复默认。trigger 按钮显示当前分配的动作名和槽位名（过长截断并带完整 tooltip）；选择列表用标题而不是 hash 作为主标签；服务器 catalog 是成功/所有权/偏好的唯一来源。
 - `DanceScreen.rebuildWidgets()` 在任何重建（catalog、分页、导入、预览返回、窗口缩放）前保存当前路径和标题框内容，因此已输入路径和标题不会丢失。`Reset defaults` 发送 `Prefs.defaults()` 的真实值，而不是把新默认槽重新清空。
 - `Preview` 打开 `DancePreviewScreen`：用一个不在世界中注册的 client-only `RemotePlayer`＋企鹅效果渲染原生企鹅；`PenguinRenderContext.pushPreview(entity, clipId, clip, age)` 建立 ThreadLocal 覆盖，并在 `finally` 关闭。覆盖只影响当前预览绘制，且复用与权威播放相同的 `PenguinAnimationPose.evaluate`/内置程序姿态；不修改真实玩家/女仆、不发送网络播放。返回时恢复同一个 `DanceScreen` 实例，预览打开期间不会误取消上传。
@@ -182,8 +185,9 @@ DanceServer.preferences(ServerPlayer);
 
 1. K 的优先级固定为：手持有效女仆胶片 → 有效尸体复活目标 → 有企鹅效果时打开舞蹈轮盘；没有企鹅效果时 K 不会开始舞蹈。轮盘和快捷键都只发送既有 `Control/Playback`，不复制复活判定、不绕过复活。
 2. 轮盘/快捷键的“停止”只发送 `STOP` 给当前目标；服务端只移除该玩家拥有的 `MANUAL` 层，不触碰 `REVIVAL`、`MUSIC`、`MAID_MUSIC` 或其他玩家的层。拖动/关闭界面不会直接改世界状态。
-3. 支持边界：规范 JSON 与有限 Mixamo DAE（30 FPS、2..901 帧、≤30 秒、≤2 MiB 规范化、每玩家 5 个/10 MiB、全库 128 MiB）；不支持任意 XML/FBX/脚本、非 30 FPS DAE、根位移或非标准 TRS 包裹。女仆控制只接受精确类型 `touhou_little_maid:maid`、本人所有、4 格内且视线可见。
+3. 支持边界：规范 JSON 与有限 Mixamo DAE（30 FPS、2..901 帧、≤30 秒、≤2 MiB 规范化、每玩家 32 个/64 MiB、全库 128 MiB）；不支持任意 XML/FBX/脚本、非 30 FPS DAE、根位移或非标准 TRS 包裹。女仆控制只接受精确类型 `touhou_little_maid:maid`、本人所有、4 格内且视线可见。
 4. 原生预览是客户端独立实体渲染，不注册世界、不修改真实玩家/女仆、不发送播放；它复用同一 16 关节 `PenguinAnimationPose` 与内置程序姿态，因此预览与权威播放不会出现两套数学。
+5. 两个额外管理快捷键默认未绑定，只在没有界面、窗口活跃、未暂停且存在客户端玩家/世界/连接时，通过既有 `connection.sendCommand("kusopenguin disc")` 与 `connection.sendCommand("kusopenguin dances")` 打开对应页面。它们不检查企鹅效果、不新增网络动作，也不改动 K 的优先级、八个快捷槽或 `options.txt` 绑定。
 
 ## 9. 开发验证与限制
 

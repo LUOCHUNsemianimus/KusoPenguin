@@ -18,7 +18,7 @@ public final class DanceNetwork {
 
     @SubscribeEvent
     public static void register(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar("2");
+        var registrar = event.registrar("3");
 
         registrar.playToServer(DancePackets.Request.TYPE, DancePackets.Request.STREAM_CODEC,
             (payload, context) -> context.enqueueWork(() -> {

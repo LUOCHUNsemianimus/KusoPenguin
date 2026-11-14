@@ -1,5 +1,6 @@
 package com.luochun.kusopenguin.compat;
 
+import com.luochun.kusopenguin.music.DanceSettings;
 import com.luochun.kusopenguin.vocals.VocalItems;
 import java.util.UUID;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -61,6 +62,23 @@ public final class MelodiesDanceCompat {
         return AVAILABLE && entity != null && Impl.playingUploadedMidi(entity);
     }
 
+    /**
+     * Shared maid-music dancer gate for both acquisition and every-tick revalidation. The exact
+     * entity type and optional TLM presence are checked before any TLM type is resolved. The
+     * default {@code false} policy additionally requires the idle task and the native IDLE
+     * schedule detail; {@code true} restores the previous unrestricted behaviour. A missing task
+     * or schedule fails closed.
+     */
+    public static boolean eligibleMaidMusicDancer(LivingEntity entity) {
+        if (!ModList.get().isLoaded("touhou_little_maid") || !isMaid(entity)) {
+            return false;
+        }
+        if (DanceSettings.UNRESTRICTED_MAID_MUSIC_DANCE.get()) {
+            return true;
+        }
+        return MaidImpl.eligibleIdleDancer(entity);
+    }
+
     private static final class Impl {
         private Impl() {
         }
@@ -100,6 +118,18 @@ public final class MelodiesDanceCompat {
         static UUID maidOwner(LivingEntity entity) {
             return entity instanceof com.github.tartaricacid.touhoulittlemaid.entity.passive.EntityMaid maid
                     ? maid.getOwnerUUID() : null;
+        }
+
+        static boolean eligibleIdleDancer(LivingEntity entity) {
+            if (!(entity instanceof com.github.tartaricacid.touhoulittlemaid.entity.passive.EntityMaid maid)) {
+                return false;
+            }
+            com.github.tartaricacid.touhoulittlemaid.api.task.IMaidTask task = maid.getTask();
+            return task != null
+                    && com.github.tartaricacid.touhoulittlemaid.entity.task.TaskIdle.UID
+                            .equals(task.getUid())
+                    && net.minecraft.world.entity.schedule.Activity.IDLE
+                            .equals(maid.getScheduleDetail());
         }
     }
 }

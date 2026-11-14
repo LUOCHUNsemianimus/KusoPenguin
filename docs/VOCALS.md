@@ -6,7 +6,7 @@
 
 - 乐器弹唱：先在沉浸式奏乐中选曲，再点击“人声设置”或输入 `/kusopenguin vocals`。导入或选择 MP3/WAV/OGG，保存绑定；用“弹唱／仅弹奏”切换人声。配置好的乐器交给女仆后保留绑定。
 - 对齐人声：偏移单位为毫秒，正数让人声延后，负数跳过音频开头。录音需与 MIDI 的速度匹配；不会自动生成歌声或变速。
-- 清唱：取得 `/give @s kuso_penguin:microphone`，右击打开设置。只需导入或选择人声、保存绑定，再按“播放／暂停”，无需 MIDI。已配置且未显式暂停的麦克风交给女仆后会自动播放；显式暂停会保留。
+- 清唱：取得 `/give @s kuso_penguin:microphone`，右击打开设置。工作台也可用竖直配方合成：音符盒 → 红石中继器 → 铜锭。只需导入或选择人声、保存绑定，再按“播放／暂停”，无需 MIDI。已配置且未显式暂停的麦克风交给女仆后会自动播放；显式暂停会保留。
 - 麦克风持在胸前；持麦角色的普通乐器音符会静音，其他角色不受影响。清唱独立于附近的 MIDI 合奏。
 - 音频沿用服务器曲库与附近客户端下载缓存；最多 5 分钟／32 MiB，音量 0–2。麦克风同时保存一首当前音频，曲库内音频可切换。普通乐器可保存 16 条曲目绑定。
 - 编辑会话有效期十分钟，操作时续期；换物品、换手或换曲后，旧页面不能修改新物品。超时请重新打开。
@@ -31,7 +31,11 @@ class is referenced.
 ## Standalone microphone
 
 `com.luochun.kusopenguin.vocals.VocalItems` registers `kuso_penguin:microphone` and adds it to
-`TOOLS_AND_UTILITIES`. Immersive Melodies is optional. With IM present the item is a lazy
+`TOOLS_AND_UTILITIES`. When IM is loaded it is additionally inserted into the exact
+`immersive_melodies:immersive_melodies` creative tab by comparing the event tab key's location
+with a plain `ResourceLocation`; no IM class is referenced on the outer common path and no hard
+dependency is added. The item is also produced by a shaped recipe (vertical note block, repeater,
+copper ingot), so it is obtainable in survival. Immersive Melodies is optional. With IM present the item is a lazy
 `InstrumentItem` subclass with a silent eight-octave adaptor; that adaptor deletes only its own
 freshly-created `Sounds.sounds` descriptor keys, and `inventoryClientTick` is deliberately empty so
 the microphone never fetches or plays MIDI notes. Without IM the same id is a plain item whose use

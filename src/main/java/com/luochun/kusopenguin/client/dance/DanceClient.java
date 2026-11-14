@@ -343,6 +343,7 @@ public final class DanceClient implements DanceClientHooks.Listener {
     public static void tick(ClientTickEvent.Post event) {
         DanceTransfers.tick();
         DanceQuickKeys.poll();
+        com.luochun.kusopenguin.client.ManagementKeys.poll();
         if (MC.level == null) {
             PLAYBACK.clear();
             REQUESTED.clear();

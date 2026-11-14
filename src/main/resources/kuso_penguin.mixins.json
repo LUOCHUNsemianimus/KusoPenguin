@@ -35,6 +35,8 @@
     "MaidYsmEntryMixin",
     "MaidYsmNativeMeshMixin",
     "MaidYsmLayerMixin",
+    "PlayerYsmRenderMixin",
+    "PlayerYsmLayerMixin",
     "CapeLayerMixin",
     "ElytraLayerMixin",
     "ParrotOnShoulderLayerMixin",

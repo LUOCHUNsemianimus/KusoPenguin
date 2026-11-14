@@ -38,6 +38,9 @@ public final class VocalItems {
     private static final String IM_MOD_ID = "immersive_melodies";
     private static final String SILENT_SOUND_NAME = "microphone_silent";
     private static final boolean IM_AVAILABLE = ModList.get().isLoaded(IM_MOD_ID);
+    /** IM 0.8.0 creative tab key, verified from its static initializer. */
+    private static final ResourceLocation IM_CREATIVE_TAB =
+        ResourceLocation.fromNamespaceAndPath(IM_MOD_ID, IM_MOD_ID);
 
     private static final DeferredRegister.Items ITEMS =
         DeferredRegister.createItems(KusoPenguin.MODID);
@@ -106,6 +109,8 @@ public final class VocalItems {
 
     private static void addCreative(BuildCreativeModeTabContentsEvent event) {
         if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
+            event.accept(MICROPHONE.get());
+        } else if (IM_AVAILABLE && event.getTabKey().location().equals(IM_CREATIVE_TAB)) {
             event.accept(MICROPHONE.get());
         }
     }

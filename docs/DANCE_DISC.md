@@ -3,12 +3,15 @@
 ## 使用 / Usage
 
 输入 `/kusopenguin disc` 打开服务器音乐库，粘贴音频路径或将文件拖入窗口。
+也可以使用默认未绑定的“打开自定义唱片库”客户端快捷键；它只在游戏内（无界面、窗口活跃、未暂停）通过同一命令打开，不要求企鹅效果。
 导入完成后选择曲目，点击“写入 / 领取唱片”，然后将唱片放入原版唱片机。
 手持已有自定义唱片时会更新该唱片，否则加入背包（背包满时掉落）。
 音乐库不暂停单人世界，关闭页面会取消尚未提交的导入，不会停止正在播放的音乐。
 
 Run `/kusopenguin disc`, paste an audio path or drop a file, import, select a saved track,
-then click **Write / Get Disc**. Insert the disc into a vanilla jukebox. A held custom disc
+then click **Write / Get Disc**. The same screen is available from an unbound client key that
+sends this exact command only during active, unpaused gameplay and does not require the penguin
+effect. Insert the disc into a vanilla jukebox. A held custom disc
 is updated; otherwise one is added to the inventory or dropped if full. Closing the screen
 cancels an unsubmitted import but leaves existing music playing. The screen never pauses
 the integrated server. This command needs no operator permission; flyingkick settings still do.
@@ -23,6 +26,8 @@ Listeners within 64 blocks download and hash-check a local cache; late listeners
 the current record position. Use the native Records volume slider.
 
 ## 舞蹈 / Dance behavior
+
+自定义舞蹈本身仍从 `/kusopenguin dances` 或默认未绑定的“打开舞蹈管理”快捷键进入；快捷键同样复用既有命令，不检查企鹅效果，也不改变唱片舞蹈的判定。
 
 只有本模组自定义唱片触发舞蹈。默认12格内、带企鹅效果的成年兼容生物会在唱片机周围
 寻找可行走、无碰撞的站位排圈，暂停原 AI。三套舞蹈每套播放5秒并循环：
